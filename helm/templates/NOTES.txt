@@ -1,0 +1,12 @@
+City Population API has been deployed.
+
+Check rollout status:
+  kubectl rollout status deployment/{{ include "city-population.fullname" . }}-api -n {{ .Release.Namespace }}
+
+Forward a local port to the API:
+  kubectl port-forward svc/{{ include "city-population.fullname" . }}-api 8000:{{ .Values.app.service.port }} -n {{ .Release.Namespace }}
+
+Then test it:
+  curl http://localhost:8000/health
+  curl -X POST http://localhost:8000/cities -H "Content-Type: application/json" -d '{"city": "Warsaw", "population": 1863056}'
+  curl http://localhost:8000/cities/Warsaw

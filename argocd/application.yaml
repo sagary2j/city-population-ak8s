@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: city-population
+  namespace: argocd
+  finalizers:
+    # Ensures `argocd app delete` also removes the Kubernetes resources it
+    # created, rather than orphaning them.
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: city-population
+spec:
+  project: city-population
+
+  source:
+    repoURL: https://github.com/your-org/city-population.git
+    targetRevision: main
+    path: helm
+    helm:
+      valueFiles:
+        - values.yaml
+      # releaseName keeps resource names stable across re-creations of the Application.
+      releaseName: city-population
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: city-population
+
+  syncPolicy:
+    automated:
+      prune: true      # remove resources that are deleted from Git
+      selfHeal: true    # revert manual `kubectl edit` drift back to Git state
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # The image tag in helm/values.yaml is the only field the CI pipeline
+  # mutates (see .github/workflows/ci-cd.yaml's update-manifests job); ArgoCD
+  # detects that commit via its normal polling/webhook and reconciles.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas # let the HPA (if enabled) own replica count without fighting ArgoCD
+
+  revisionHistoryLimit: 10

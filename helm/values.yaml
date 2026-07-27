@@ -1,0 +1,156 @@
+# Default values for the city-population chart.
+# This file separates the application layer from the stateful Elasticsearch
+# layer so each can be scaled/tuned independently.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Application (FastAPI) layer
+# ---------------------------------------------------------------------------
+app:
+  replicaCount: 2
+
+  image:
+    repository: city-population-api
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8000
+
+  env:
+    LOG_LEVEL: "INFO"
+    ES_INDEX: "cities"
+    ES_STARTUP_MAX_RETRIES: "30"
+    ES_STARTUP_RETRY_DELAY_SECONDS: "2"
+    ES_VERIFY_CERTS: "false"
+
+  # Credentials for Elasticsearch (leave blank for the dev/single-node ES
+  # deployed by this chart, which runs with security disabled). In
+  # production, source these from a Secret backed by Azure Key Vault /
+  # HashiCorp Vault instead of plaintext values -- see README Part D.
+  elasticsearchAuth:
+    username: ""
+    password: ""
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  probes:
+    liveness:
+      path: /health
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readiness:
+      path: /health/ready
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+  # Production secret sourcing via the AKS-managed Secrets Store CSI Driver
+  # + Azure Key Vault (provisioned in terraform/key_vault.tf), instead of the
+  # plaintext helm/templates/secret.yaml used for local/dev. Disabled by
+  # default; enable once the CSI driver add-on and workload identity are
+  # set up, then point elasticsearchAuth at the CSI-mounted files instead.
+  keyVault:
+    enabled: false
+    name: ""            # terraform output: key_vault_name
+    tenantId: ""         # az account show --query tenantId -o tsv
+    userAssignedIdentityClientId: ""  # AKS key_vault_secrets_provider identity client ID
+    secrets:
+      - objectName: es-username
+        secretName: es-username
+      - objectName: es-password
+        secretName: es-password
+
+
+# ---------------------------------------------------------------------------
+# Elasticsearch (stateful data) layer
+# NOTE: this chart ships a lightweight single-node StatefulSet suitable for
+# local development and the take-home evaluation. For production sizing and
+# HA topology (dedicated master/data/ingest roles, 3+ AZs, snapshots) see
+# README.md Part D: Production Scaling Architecture.
+# ---------------------------------------------------------------------------
+elasticsearch:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: docker.elastic.co/elasticsearch/elasticsearch
+    tag: "8.17.0"
+    pullPolicy: IfNotPresent
+
+  clusterName: "city-population-es"
+  discoveryType: "single-node"
+  xpackSecurityEnabled: false
+
+  service:
+    port: 9200
+    transportPort: 9300
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  javaOpts: "-Xms512m -Xmx512m"
+
+  persistence:
+    enabled: true
+    storageClassName: "default"
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+  podSecurityContext:
+    fsGroup: 1000
+    runAsUser: 1000
+    runAsNonRoot: true
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+imagePullSecrets: []
