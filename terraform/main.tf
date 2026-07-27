@@ -110,25 +110,23 @@ resource "azurerm_kubernetes_cluster" "main" {
   sku_tier                          = "Standard"
   private_cluster_enabled           = var.enable_private_cluster
   azure_policy_enabled              = true
-  automatic_upgrade_channel         = var.aks_automatic_upgrade_channel
   local_account_disabled            = length(var.aks_admin_group_object_ids) > 0
   role_based_access_control_enabled = true
-  oidc_issuer_enabled               = true   # required for Azure AD Workload Identity
+  oidc_issuer_enabled               = true # required for Azure AD Workload Identity
   workload_identity_enabled         = true
   image_cleaner_enabled             = true
   image_cleaner_interval_hours      = 48
   tags                              = local.common_tags
 
   default_node_pool {
-    name                        = "system"
-    vm_size                     = var.system_node_vm_size
-    node_count                  = var.system_node_count
-    max_pods                    = 50
-    vnet_subnet_id              = azurerm_subnet.aks.id
+    name                         = "system"
+    vm_size                      = var.system_node_vm_size
+    node_count                   = var.system_node_count
+    max_pods                     = 50
+    vnet_subnet_id               = azurerm_subnet.aks.id
     only_critical_addons_enabled = true # keep app workloads off the system pool
-    os_disk_size_gb             = 64
-    os_disk_type                = "Ephemeral"
-    host_encryption_enabled     = true
+    os_disk_size_gb              = 64
+    os_disk_type                 = "Ephemeral"
     upgrade_settings {
       max_surge = "33%"
     }
@@ -148,11 +146,11 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   network_profile {
-    network_plugin      = "azure"
-    network_policy      = "azure"
-    load_balancer_sku   = "standard"
-    service_cidr        = "10.30.0.0/16"
-    dns_service_ip      = "10.30.0.10"
+    network_plugin    = "azure"
+    network_policy    = "azure"
+    load_balancer_sku = "standard"
+    service_cidr      = "10.30.0.0/16"
+    dns_service_ip    = "10.30.0.10"
   }
 
   dynamic "api_server_access_profile" {
@@ -195,10 +193,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   mode                  = "User"
   max_pods              = 50
   os_disk_type          = "Ephemeral"
-  host_encryption_enabled = true
-  auto_scaling_enabled    = true
-  min_count               = var.user_node_min_count
-  max_count               = var.user_node_max_count
+  auto_scaling_enabled  = true
+  min_count             = var.user_node_min_count
+  max_count             = var.user_node_max_count
   node_labels = {
     "workload" = "city-population"
   }

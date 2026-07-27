@@ -12,12 +12,12 @@ aks_subnet_address_prefix = ["10.20.1.0/24"]
 api_server_authorized_ip_ranges = []
 enable_private_cluster          = true
 
-kubernetes_version   = "1.30"
-system_node_count    = 2
-system_node_vm_size  = "Standard_D2s_v5"
-user_node_min_count  = 2
-user_node_max_count  = 6
-user_node_vm_size    = "Standard_D4s_v5"
+kubernetes_version  = "1.30"
+system_node_count   = 2
+system_node_vm_size = "Standard_D2s_v5"
+user_node_min_count = 2
+user_node_max_count = 6
+user_node_vm_size   = "Standard_D4s_v5"
 
 # Azure AD group(s) that should get cluster-admin via Azure AD RBAC.
 # Find with: az ad group show --group "<name>" --query id -o tsv

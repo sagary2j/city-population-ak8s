@@ -10,16 +10,16 @@ resource "azurerm_key_vault" "main" {
   #checkov:skip=CKV2_AZURE_32:Private endpoint exists in this module (azurerm_private_endpoint.key_vault), but graph check can false-positive with conditional resources.
   count = var.enable_key_vault ? 1 : 0
 
-  name                       = "${substr(local.name_prefix, 0, 17)}-kv-${random_string.suffix.result}"
-  resource_group_name        = azurerm_resource_group.main.name
-  location                   = azurerm_resource_group.main.location
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
-  purge_protection_enabled   = var.environment == "prod"
-  soft_delete_retention_days = 7
-  rbac_authorization_enabled = true
+  name                          = "${substr(local.name_prefix, 0, 17)}-kv-${random_string.suffix.result}"
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
+  sku_name                      = "standard"
+  purge_protection_enabled      = var.environment == "prod"
+  soft_delete_retention_days    = 7
+  rbac_authorization_enabled    = true
   public_network_access_enabled = false
-  tags                       = local.common_tags
+  tags                          = local.common_tags
 
   network_acls {
     default_action = "Deny"
