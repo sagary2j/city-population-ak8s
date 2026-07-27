@@ -47,7 +47,7 @@ sre-city-population/
 
 ---
 
-## Part C: Deployment Guide
+## Deployment Guide
 
 ### Prerequisites
 - Docker + Docker Compose
@@ -176,7 +176,7 @@ kubectl delete pvc -l app.kubernetes.io/component=database
 
 ---
 
-## Part E: Infrastructure as Code (Terraform → AKS + ACR)
+## Infrastructure as Code (Terraform → AKS + ACR)
 
 `terraform/` provisions everything the app needs on Azure: a resource
 group, a VNet/subnet, Log Analytics (Container Insights), Azure Container
@@ -248,7 +248,7 @@ $(terraform output -raw get_credentials_command)
 
 ---
 
-## Part F: CI/CD Pipeline (GitHub Actions + DevSecOps)
+## CI/CD Pipeline (GitHub Actions + DevSecOps)
 
 `.github/workflows/ci-cd.yaml` runs on every push/PR touching `app/`,
 `Dockerfile`, or `helm/`:
@@ -296,7 +296,7 @@ above) but can't, say, open up the AKS API server to the internet.
 
 ---
 
-## Part G: GitOps Deployment (ArgoCD)
+## GitOps Deployment (ArgoCD)
 
 ### Install ArgoCD on the cluster (one-time)
 
@@ -358,7 +358,7 @@ an ArgoCD `ApplicationSet` templated over a list of environments.
 
 ---
 
-## Part D: SRE Reflection & Production Roadmap
+## SRE Reflection & Production Roadmap
 
 ### Encountered Challenges
 
@@ -496,7 +496,7 @@ is self-healed automatically, and a rollback is just a `git revert`.
 
 ---
 
-## Notes on the Take-Home Spec Mapping
+## Notes
 
 - **Health check** → `GET /health` returns `{"status": "OK"}` exactly as
   specified; `GET /health/ready` is an additional, DB-aware endpoint used
