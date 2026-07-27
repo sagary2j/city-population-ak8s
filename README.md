@@ -1,4 +1,4 @@
-# City Population API — SRE Take-Home Solution
+# City Population API
 
 A containerized FastAPI service that stores city population data in
 Elasticsearch, packaged for Kubernetes via a modular Helm v3 chart, with
