@@ -1,0 +1,51 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: city-population-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - city-population-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: city-population-api
+    environment:
+      - ES_HOST=http://elasticsearch:9200
+      - ES_INDEX=cities
+      - LOG_LEVEL=INFO
+      - ES_STARTUP_MAX_RETRIES=30
+      - ES_STARTUP_RETRY_DELAY_SECONDS=2
+    ports:
+      - "8000:8000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - city-population-net
+
+networks:
+  city-population-net:
+    driver: bridge
+
+volumes:
+  es-data:
