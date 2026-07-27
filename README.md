@@ -191,9 +191,9 @@ Vault, and an Azure AD App Registration federated for GitHub Actions OIDC
 # 1. Bootstrap the remote state storage account (idempotent, run once per env)
 ./scripts/bootstrap-tfstate.sh dev westeurope
 
-# 2. Copy and edit the tfvars for your environment
+# 2. Edit the tfvars for your environment if any changes
 cd terraform
-cp dev.tfvars.example dev.tfvars
+vim dev.tfvars
 # set github_repository to your actual "org/repo"
 
 # 3. Init with the backend values printed by the bootstrap script

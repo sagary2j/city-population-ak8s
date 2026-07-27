@@ -1,7 +1,7 @@
 # Copy to dev.tfvars (or stage.tfvars / prod.tfvars) and adjust, then:
 #   terraform apply -var-file=dev.tfvars
 
-project_name = "citypop"
+project_name = "city-population"
 environment  = "dev"
 location     = "westeurope"
 

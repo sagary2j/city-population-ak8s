@@ -1,6 +1,5 @@
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
-  # ACR names must be globally unique, alphanumeric only, 5-50 chars.
   acr_name = replace("${var.project_name}${var.environment}acr${random_string.suffix.result}", "-", "")
 
   common_tags = merge(var.tags, {
