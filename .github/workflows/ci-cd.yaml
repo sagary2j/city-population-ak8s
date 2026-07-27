@@ -183,12 +183,12 @@ jobs:
         if: always()
         run: |
           if [ -d checkov-results.sarif ]; then
-            python3 - <<'PY'
-            from pathlib import Path
-            files = sorted(Path("checkov-results.sarif").glob("*.sarif"))
-            if files:
-                Path("checkov-results-upload.sarif").write_text(files[0].read_text())
-            PY
+            for f in checkov-results.sarif/*.sarif; do
+              if [ -f "$f" ]; then
+                cp "$f" checkov-results-upload.sarif
+                break
+              fi
+            done
           fi
           if [ ! -f checkov-results-upload.sarif ] && [ -f checkov-results.sarif ]; then
             cp checkov-results.sarif checkov-results-upload.sarif
