@@ -68,6 +68,13 @@ jobs:
         working-directory: app
         run: pytest tests/ -v --junitxml=pytest-results.xml
 
+      - name: Ensure pytest report exists
+        if: always()
+        run: |
+          if [ ! -f app/pytest-results.xml ]; then
+            printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?><testsuites></testsuites>' > app/pytest-results.xml
+          fi
+
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
@@ -79,47 +86,35 @@ jobs:
       - name: SAST (bandit)
         run: |
           bandit -r app/main.py -f json -o app/bandit-results.json || true
-          python - <<'PY'
+          python3 - <<'PY'
           import json
           from pathlib import Path
 
-          json_path = Path("app/bandit-results.json")
-          if json_path.exists():
+          src = Path("app/bandit-results.json")
+          results = []
+          if src.exists():
               try:
-                  bandit = json.loads(json_path.read_text())
-                  results = bandit.get("results", [])
+                  payload = json.loads(src.read_text())
+                  for item in payload.get("results", []):
+                      sev = (item.get("issue_severity") or "LOW").upper()
+                      level = "error" if sev == "HIGH" else ("warning" if sev == "MEDIUM" else "note")
+                      results.append(
+                          {
+                              "ruleId": item.get("test_id", "BANDIT"),
+                              "level": level,
+                              "message": {"text": item.get("issue_text", "Bandit finding")},
+                              "locations": [
+                                  {
+                                      "physicalLocation": {
+                                          "artifactLocation": {"uri": item.get("filename", "unknown")},
+                                          "region": {"startLine": item.get("line_number", 1)},
+                                      }
+                                  }
+                              ],
+                          }
+                      )
               except Exception:
                   results = []
-          else:
-              results = []
-
-          sarif_results = []
-          for item in results:
-              filename = item.get("filename", "unknown")
-              line = item.get("line_number", 1)
-              sev = (item.get("issue_severity") or "LOW").upper()
-              if sev == "HIGH":
-                  level = "error"
-              elif sev == "MEDIUM":
-                  level = "warning"
-              else:
-                  level = "note"
-
-              sarif_results.append(
-                  {
-                      "ruleId": item.get("test_id", "BANDIT"),
-                      "level": level,
-                      "message": {"text": item.get("issue_text", "Bandit finding")},
-                      "locations": [
-                          {
-                              "physicalLocation": {
-                                  "artifactLocation": {"uri": filename},
-                                  "region": {"startLine": line},
-                              }
-                          }
-                      ],
-                  }
-              )
 
           sarif = {
               "version": "2.1.0",
@@ -133,13 +128,19 @@ jobs:
                               "rules": [],
                           }
                       },
-                      "results": sarif_results,
+                      "results": results,
                   }
               ],
           }
-
           Path("app/bandit-results.sarif").write_text(json.dumps(sarif))
           PY
+
+      - name: Ensure Bandit SARIF exists
+        if: always()
+        run: |
+          if [ ! -f app/bandit-results.sarif ]; then
+            printf '%s\n' '{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[]}' > app/bandit-results.sarif
+          fi
 
       - name: Upload bandit SARIF
         uses: github/codeql-action/upload-sarif@v4
