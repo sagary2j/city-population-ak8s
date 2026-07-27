@@ -103,10 +103,8 @@ curl -i http://localhost:8000/cities/Atlantis
 # {"error":"city_not_found","detail":"No population data found for city 'Atlantis'.","request_id":"..."}
 ```
 
-
 Interactive API docs (Swagger UI) are available at `http://localhost:8000/docs`.
 
-Tear down: `docker compose down -v`
 
 ### 2. Build the container image directly
 
@@ -115,13 +113,6 @@ docker build -t city-population-api:1.0.0 .
 ```
 
 ### 3. Spin up a local Kubernetes cluster
-
-**Using Kind:**
-
-```bash
-kind create cluster --name city-population
-kind load docker-image city-population-api:1.0.0 --name city-population
-```
 
 **Using Minikube:**
 
