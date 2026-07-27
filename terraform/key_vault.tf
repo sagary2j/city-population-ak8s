@@ -5,6 +5,7 @@
 # helm/templates/secretproviderclass.yaml) using Azure AD Workload Identity
 # rather than any static credential.
 
+#checkov:skip=CKV2_AZURE_32:Private endpoint is implemented as a separate azurerm_private_endpoint resource with the same conditional count; this skip avoids graph-resolution false positives in CI.
 resource "azurerm_key_vault" "main" {
   count = var.enable_key_vault ? 1 : 0
 

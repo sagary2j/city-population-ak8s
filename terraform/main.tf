@@ -97,7 +97,7 @@ resource "azurerm_container_registry" "main" {
 # ---------------------------------------------------------------------------
 # AKS Cluster
 # ---------------------------------------------------------------------------
-# checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
+#checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
   name                              = "${local.name_prefix}-aks"
   resource_group_name               = azurerm_resource_group.main.name
