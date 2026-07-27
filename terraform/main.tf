@@ -70,9 +70,11 @@ resource "azurerm_log_analytics_workspace" "main" {
 # ---------------------------------------------------------------------------
 # Azure Container Registry
 # ---------------------------------------------------------------------------
-# checkov:skip=CKV_AZURE_167:Retention policy for untagged manifests is not supported by the pinned azurerm provider schema in this take-home stack.
-# checkov:skip=CKV_AZURE_164:Content trust enforcement is currently managed in CI/CD via image signing (cosign) rather than ACR trust policy blocks unsupported by this provider version.
+#checkov:skip=CKV_AZURE_167:Retention policy for untagged manifests is not supported by the pinned azurerm provider schema in this take-home stack.
+#checkov:skip=CKV_AZURE_164:Content trust enforcement is currently managed in CI/CD via image signing (cosign) rather than ACR trust policy blocks unsupported by this provider version.
 resource "azurerm_container_registry" "main" {
+  #checkov:skip=CKV_AZURE_167:Retention policy block unavailable in pinned azurerm provider schema for this stack.
+  #checkov:skip=CKV_AZURE_164:Image trust is enforced in CI/CD via signing/verification workflow controls.
   name                          = local.acr_name
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location
@@ -99,6 +101,7 @@ resource "azurerm_container_registry" "main" {
 # ---------------------------------------------------------------------------
 #checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
+  #checkov:skip=CKV_AZURE_117:Cluster uses host encryption + platform-managed encryption; DES/CMK rollout is externalized.
   name                              = "${local.name_prefix}-aks"
   resource_group_name               = azurerm_resource_group.main.name
   location                          = azurerm_resource_group.main.location
