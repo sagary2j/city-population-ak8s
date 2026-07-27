@@ -139,7 +139,7 @@ variable "create_github_oidc_identity" {
 variable "github_repository" {
   description = "GitHub repository in 'owner/repo' form, used to scope the OIDC federated credential trust (subject claim)."
   type        = string
-  default     = "your-org/city-population"
+  default     = "sagary2j/city-population-ak8s"
 }
 
 variable "github_oidc_environments" {
