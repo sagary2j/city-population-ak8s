@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:?Usage: $0 <environment> [location]}"
-LOCATION="${2:-westeurope}"
+LOCATION="${2:-eastus}"
 PROJECT="citypop"
 
 RG_NAME="${PROJECT}-${ENVIRONMENT}-tfstate-rg"

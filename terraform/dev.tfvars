@@ -1,9 +1,9 @@
 # Copy to dev.tfvars (or stage.tfvars / prod.tfvars) and adjust, then:
 #   terraform apply -var-file=dev.tfvars
 
-project_name = "city-population"
+project_name = "citypop"
 environment  = "dev"
-location     = "westeurope"
+location     = "eastus"
 
 vnet_address_space        = ["10.20.0.0/16"]
 aks_subnet_address_prefix = ["10.20.1.0/24"]

@@ -18,7 +18,7 @@ variable "environment" {
 variable "location" {
   description = "Azure region for all resources."
   type        = string
-  default     = "westeurope"
+  default     = "eastus"
 }
 
 variable "tags" {
@@ -27,7 +27,6 @@ variable "tags" {
   default = {
     workload    = "city-population-api"
     managed_by  = "terraform"
-    cost_center = "sre-take-home"
   }
 }
 
@@ -164,7 +163,7 @@ variable "enable_key_vault" {
 }
 
 variable "acr_replica_locations" {
-  description = "Additional Azure regions for ACR geo-replication (Premium SKU only)."
+  description = "Additional Azure regions for ACR geo-replication (Premium SKU only). Must be regions that support Availability Zones, since zone_redundancy_enabled = true is set for each replica."
   type        = list(string)
   default     = ["northeurope"]
 }
