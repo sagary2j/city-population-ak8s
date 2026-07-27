@@ -59,7 +59,7 @@ variable "api_server_authorized_ip_ranges" {
 variable "enable_private_cluster" {
   description = "If true, the AKS API server is only reachable from within the VNet (requires a self-hosted runner or VPN/bastion for kubectl/helm/argocd access)."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ---------------------------------------------------------------------------
@@ -117,13 +117,13 @@ variable "log_analytics_retention_days" {
 # ACR
 # ---------------------------------------------------------------------------
 variable "acr_sku" {
-  description = "Azure Container Registry SKU."
+  description = "Azure Container Registry SKU (Premium required for security controls used by this stack)."
   type        = string
-  default     = "Standard"
+  default     = "Premium"
 
   validation {
-    condition     = contains(["Basic", "Standard", "Premium"], var.acr_sku)
-    error_message = "acr_sku must be one of: Basic, Standard, Premium."
+    condition     = var.acr_sku == "Premium"
+    error_message = "acr_sku must be Premium (required for geo-replication, zone redundancy, trust/quarantine, and dedicated endpoints)."
   }
 }
 
@@ -161,4 +161,21 @@ variable "enable_key_vault" {
   description = "Create an Azure Key Vault for application/Elasticsearch secrets, wired up for the AKS Secrets Store CSI Driver via workload identity."
   type        = bool
   default     = true
+}
+
+variable "acr_replica_locations" {
+  description = "Additional Azure regions for ACR geo-replication (Premium SKU only)."
+  type        = list(string)
+  default     = ["northeurope"]
+}
+
+variable "aks_automatic_upgrade_channel" {
+  description = "AKS automatic upgrade channel."
+  type        = string
+  default     = "stable"
+
+  validation {
+    condition     = contains(["patch", "rapid", "node-image", "stable"], var.aks_automatic_upgrade_channel)
+    error_message = "aks_automatic_upgrade_channel must be one of: patch, rapid, node-image, stable."
+  }
 }

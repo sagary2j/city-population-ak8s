@@ -15,12 +15,54 @@ resource "azurerm_key_vault" "main" {
   sku_name                   = "standard"
   purge_protection_enabled   = var.environment == "prod"
   soft_delete_retention_days = 7
-  enable_rbac_authorization  = true
+  rbac_authorization_enabled = true
+  public_network_access_enabled = false
   tags                       = local.common_tags
 
   network_acls {
-    default_action = "Allow" # tighten to "Deny" + service endpoints for production, see README Part D
+    default_action = "Deny"
     bypass         = "AzureServices"
+  }
+}
+
+resource "azurerm_private_dns_zone" "key_vault" {
+  count = var.enable_key_vault ? 1 : 0
+
+  name                = "privatelink.vaultcore.azure.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.common_tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "key_vault" {
+  count = var.enable_key_vault ? 1 : 0
+
+  name                  = "${local.name_prefix}-kv-dns-link"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.key_vault[0].name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  registration_enabled  = false
+  tags                  = local.common_tags
+}
+
+resource "azurerm_private_endpoint" "key_vault" {
+  count = var.enable_key_vault ? 1 : 0
+
+  name                = "${local.name_prefix}-kv-pe"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.aks.id
+  tags                = local.common_tags
+
+  private_service_connection {
+    name                           = "${local.name_prefix}-kv-psc"
+    private_connection_resource_id = azurerm_key_vault.main[0].id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "default"
+    private_dns_zone_ids = [azurerm_private_dns_zone.key_vault[0].id]
   }
 }
 

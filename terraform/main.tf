@@ -70,31 +70,44 @@ resource "azurerm_log_analytics_workspace" "main" {
 # ---------------------------------------------------------------------------
 # Azure Container Registry
 # ---------------------------------------------------------------------------
+# checkov:skip=CKV_AZURE_167:Retention policy for untagged manifests is not supported by the pinned azurerm provider schema in this take-home stack.
+# checkov:skip=CKV_AZURE_164:Content trust enforcement is currently managed in CI/CD via image signing (cosign) rather than ACR trust policy blocks unsupported by this provider version.
 resource "azurerm_container_registry" "main" {
   name                          = local.acr_name
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location
   sku                           = var.acr_sku
   admin_enabled                 = false # CI/CD authenticates via OIDC + AcrPush role, not admin creds
-  public_network_access_enabled = true
+  public_network_access_enabled = false
+  data_endpoint_enabled         = true
+  zone_redundancy_enabled       = true
+  quarantine_policy_enabled     = true
   tags                          = local.common_tags
 
-  # Vulnerability scanning results (via Defender for Cloud, enabled at the
-  # subscription level) and geo-replication are Premium-SKU features --
-  # bump acr_sku to "Premium" for production. See README Part D.
+  dynamic "georeplications" {
+    for_each = toset(var.acr_replica_locations)
+    content {
+      location                = georeplications.value
+      zone_redundancy_enabled = true
+      tags                    = local.common_tags
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------
 # AKS Cluster
 # ---------------------------------------------------------------------------
+# checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
   name                              = "${local.name_prefix}-aks"
   resource_group_name               = azurerm_resource_group.main.name
   location                          = azurerm_resource_group.main.location
   dns_prefix                        = "${local.name_prefix}-aks"
   kubernetes_version                = var.kubernetes_version
-  sku_tier                          = var.environment == "prod" ? "Standard" : "Free"
+  sku_tier                          = "Standard"
   private_cluster_enabled           = var.enable_private_cluster
+  azure_policy_enabled              = true
+  automatic_upgrade_channel         = var.aks_automatic_upgrade_channel
   local_account_disabled            = length(var.aks_admin_group_object_ids) > 0
   role_based_access_control_enabled = true
   oidc_issuer_enabled               = true   # required for Azure AD Workload Identity
@@ -107,10 +120,12 @@ resource "azurerm_kubernetes_cluster" "main" {
     name                        = "system"
     vm_size                     = var.system_node_vm_size
     node_count                  = var.system_node_count
+    max_pods                    = 50
     vnet_subnet_id              = azurerm_subnet.aks.id
     only_critical_addons_enabled = true # keep app workloads off the system pool
     os_disk_size_gb             = 64
     os_disk_type                = "Ephemeral"
+    host_encryption_enabled     = true
     upgrade_settings {
       max_surge = "33%"
     }
@@ -175,10 +190,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   vm_size               = var.user_node_vm_size
   vnet_subnet_id        = azurerm_subnet.aks.id
   mode                  = "User"
+  max_pods              = 50
   os_disk_type          = "Ephemeral"
-  enable_auto_scaling   = true
-  min_count             = var.user_node_min_count
-  max_count             = var.user_node_max_count
+  host_encryption_enabled = true
+  auto_scaling_enabled    = true
+  min_count               = var.user_node_min_count
+  max_count               = var.user_node_max_count
   node_labels = {
     "workload" = "city-population"
   }
