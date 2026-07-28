@@ -75,6 +75,8 @@ resource "azurerm_container_registry" "main" {
   #checkov:skip=CKV_AZURE_167:Retention policy block unavailable in pinned azurerm provider schema for this stack.
   #checkov:skip=CKV_AZURE_164:Image trust is enforced in CI/CD via signing/verification workflow controls.
   #checkov:skip=CKV_AZURE_137:Public network access is required so GitHub-hosted Actions runners (public IPs) can push/pull; access is still gated by AAD auth + RBAC (AcrPush), not anonymous.
+  #checkov:skip=CKV_AZURE_139:Same as CKV_AZURE_137 -- public networking is required for GitHub-hosted runners; access is gated by AAD auth + AcrPush RBAC.
+  #checkov:skip=CKV_AZURE_166:Quarantine requires an external Defender for Cloud/Qualys scanner integration (not configured here) to ever release images; Trivy in ci-cd.yaml already gates vulnerabilities before push.
   name                          = local.acr_name
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location
