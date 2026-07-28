@@ -15,8 +15,12 @@ WORKDIR /build
 # Only the manifest is copied first to maximize Docker layer caching.
 COPY app/requirements.txt ./requirements.txt
 
+# Upgrade pip, setuptools, and wheel explicitly -- the versions bundled by
+# `python -m venv` (via ensurepip) are pinned to whatever shipped with the
+# base image and lag behind upstream security fixes (e.g. CVE-2026-24049 in
+# wheel, CVE-2026-8643 in pip).
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------------------
