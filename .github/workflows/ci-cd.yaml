@@ -224,7 +224,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-and-scan, iac-scan]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    environment: ${{ github.ref_name == 'main' && 'dev' || '' }}
+    # Always use the 'dev' GitHub Environment for this job (never gated on
+    # branch name): the CI identity's federated credential
+    # (terraform/identity.tf) only trusts the `environment:dev`/`prod`
+    # subjects, `ref:refs/heads/main`, and `pull_request` -- not arbitrary
+    # feature-branch refs. Using `environment: dev` here (matching
+    # terraform.yaml's plan job) means pushes from any branch resolve to an
+    # already-trusted OIDC subject.
+    environment: dev
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
