@@ -33,7 +33,7 @@ sre-city-population/
 │   ├── key_vault.tf                 # Azure Key Vault + AKS CSI wiring
 │   ├── identity.tf                  # GitHub OIDC App Registration + role assignments
 │   ├── outputs.tf
-│   └── dev.tfvars.example
+│   └── dev.tfvars
 ├── .github/workflows/
 │   ├── ci-cd.yaml                  # Part F: lint/test/scan/build/push/GitOps update
 │   └── terraform.yaml              # Plan on PR, apply on merge to main
@@ -192,7 +192,12 @@ terraform init \
   -backend-config="resource_group_name=<tfstate-rg>" \
   -backend-config="storage_account_name=<tfstate-sa>" \
   -backend-config="container_name=tfstate" \
-  -backend-config="key=city-population/dev.tfstate"
+  -backend-config="key=city-population/dev.tfstate" \
+  -backend-config="use_azuread_auth=true"
+# `use_azuread_auth=true` authenticates to the state storage account via your
+# `az login`/OIDC identity's RBAC role (Storage Blob Data Contributor) rather
+# than a storage account access key -- no key ever needs to be generated or
+# stored. The same flag is used by both GitHub Actions workflows below.
 
 # 4. Plan and apply
 terraform plan  -var-file=dev.tfvars
@@ -220,10 +225,29 @@ In the GitHub repo (Settings → Secrets and variables → Actions), set:
 | `ACR_LOGIN_SERVER` | Variable | `acr_login_server` output |
 | `TF_STATE_RG` / `TF_STATE_SA` / `TF_STATE_CONTAINER` / `TF_STATE_KEY` | Variables | printed by `bootstrap-tfstate.sh` |
 
+Set the three `AZURE_*` values as **Secrets** and everything else as
+**Variables** only -- `${{ secrets.* }}` and `${{ vars.* }}` are looked up
+independently, so a name defined in both resolves to the Secret and can mask
+a Variable update. Only `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/
+`AZURE_SUBSCRIPTION_ID` need Secret-level protection (and even those aren't
+truly sensitive on their own, since OIDC still requires the matching
+federated credential's trust conditions to be met); the rest are plain
+config and don't need to be write-protected as Secrets.
+
 No password/secret ever needs to be stored: `AZURE_CLIENT_ID` +
 `AZURE_TENANT_ID` + `AZURE_SUBSCRIPTION_ID` are used with `azure/login@v2`'s
 OIDC flow, trusted via the federated credentials created in
 `terraform/identity.tf` (scoped to this exact repo + GitHub Environment).
+
+> **GitHub's immutable OIDC subject claims:** for repos created/renamed/
+> transferred after 2026-07-15, GitHub issues federated token `sub` claims
+> with numeric owner/repo IDs embedded (`repo:OWNER@OWNER_ID/REPO@REPO_ID:...`)
+> instead of the legacy `repo:owner/repo:...` format. If `azure/login@v2`
+> fails with `AADSTS700213: No matching federated identity record found`,
+> set `github_owner_id`/`github_repo_id` in `dev.tfvars` to the numeric IDs
+> from `https://api.github.com/repos/<owner>/<repo>` (`.id` and `.owner.id`)
+> and re-apply -- `terraform/identity.tf` builds the federated credential
+> `subject` from these.
 
 Get cluster credentials locally:
 
@@ -263,19 +287,27 @@ $(terraform output -raw get_credentials_command)
 7. **Push & sign** — only after every prior gate passes, the image is
    pushed to ACR and keylessly signed with `cosign` (using the same GitHub
    OIDC identity — no signing key to manage/rotate).
-8. **GitOps update** — the pipeline does **not** run `kubectl apply` or
-   `helm upgrade` itself. It bumps `app.image.tag` (and
-   `app.image.repository`) in `helm/values.yaml` and commits that change
-   back to `main`. ArgoCD (Part G) detects the commit and reconciles the
-   cluster — the classic GitOps split between CI (build/test/scan) and CD
-   (sync), which also means the CI identity never needs cluster-admin.
+8. **GitOps update** *(scaffolded, currently disabled)* — the pipeline does
+   **not** run `kubectl apply` or `helm upgrade` itself. The `update-manifests`
+   job (commented out in `ci-cd.yaml` pending manual enablement) is meant to
+   bump `app.image.tag` (and `app.image.repository`) in `helm/values.yaml`
+   and commit that change back to `main`; ArgoCD (Part G) would then detect
+   the commit and reconcile the cluster — the classic GitOps split between
+   CI (build/test/scan) and CD (sync), which also means the CI identity
+   never needs cluster-admin. Until that job is uncommented, bump
+   `helm/values.yaml`'s image tag manually (or via `helm upgrade --set
+   app.image.tag=<tag>`) after a successful build.
 
 `.github/workflows/terraform.yaml` is a separate pipeline for
-infrastructure changes: `terraform plan` runs on every PR touching
-`terraform/` and is posted as a PR comment for review; `terraform apply`
-runs only on merge to `main`, gated behind the `dev` GitHub Environment
-(configure required reviewers there for a manual approval gate before
-infrastructure changes land).
+infrastructure changes: `terraform plan` runs on every PR (and every push)
+touching `terraform/` and is posted as a PR comment for review, with its
+output saved as the `tfplan` artifact; `terraform apply` runs only on merge
+to `main`, gated behind the `dev` GitHub Environment (configure required
+reviewers there for a manual approval gate before infrastructure changes
+land). The `apply` job downloads that same `tfplan` artifact and runs
+`terraform apply tfplan`, so it applies exactly what was reviewed rather
+than re-planning at apply time. Both workflows also support
+`workflow_dispatch` for on-demand manual runs.
 
 **Why two pipelines?** The app pipeline's identity only needs `AcrPush` +
 AKS "Cluster User" (read kubeconfig) — it can't modify infrastructure. The
