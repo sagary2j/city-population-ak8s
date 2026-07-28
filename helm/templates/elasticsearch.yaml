@@ -42,10 +42,13 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.elasticsearch.podSecurityContext | nindent 8 }}
-      # sysctl / ulimit prep required by Elasticsearch (mmap counts). This
-      # runs as an init container with the minimum privilege needed and
-      # does not affect the main container's non-root runtime.
+      {{- $fixVmMaxMapCountEnabled := (.Values.elasticsearch.initContainers.fixVmMaxMapCount.enabled | default true) }}
+      {{- $fixDataPermissionsEnabled := (.Values.elasticsearch.initContainers.fixDataPermissions.enabled | default true) }}
+      {{- if or $fixVmMaxMapCountEnabled $fixDataPermissionsEnabled }}
+      # sysctl / permission prep for Elasticsearch. In clusters enforcing a
+      # strict non-root policy, disable these init containers via values.
       initContainers:
+      {{- if $fixVmMaxMapCountEnabled }}
         - name: fix-vm-max-map-count
           image: busybox:1.36
           securityContext:
@@ -55,6 +58,8 @@ spec:
             - sh
             - -c
             - sysctl -w vm.max_map_count=262144 || true
+      {{- end }}
+      {{- if $fixDataPermissionsEnabled }}
         - name: fix-data-permissions
           image: busybox:1.36
           securityContext:
@@ -66,6 +71,8 @@ spec:
           volumeMounts:
             - name: es-data
               mountPath: /usr/share/elasticsearch/data
+      {{- end }}
+      {{- end }}
       containers:
         - name: elasticsearch
           image: "{{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}"

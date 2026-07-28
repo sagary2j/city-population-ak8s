@@ -137,6 +137,15 @@ elasticsearch:
 
   javaOpts: "-Xms512m -Xmx512m"
 
+  # Some local clusters enforce strict non-root policies that block privileged
+  # or root init containers. In those environments, disable these and set
+  # vm.max_map_count on the host separately if needed.
+  initContainers:
+    fixVmMaxMapCount:
+      enabled: true
+    fixDataPermissions:
+      enabled: true
+
   persistence:
     enabled: true
     storageClassName: "default"
