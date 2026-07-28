@@ -141,6 +141,22 @@ variable "github_repository" {
   default     = "sagary2j/city-population-ak8s"
 }
 
+# GitHub now issues immutable `sub` claims (owner/repo IDs embedded, e.g.
+# repo:OWNER@OWNER_ID/REPO@REPO_ID:...) for repositories created, renamed, or
+# transferred after 2026-07-15. Find these via:
+#   curl -s -H "Authorization: Bearer $(gh auth token)" https://api.github.com/repos/<owner>/<repo> | jq '.id, .owner.id'
+variable "github_owner_id" {
+  description = "Numeric GitHub owner (user/org) ID, required to build the immutable OIDC subject claim format now used by this repository."
+  type        = string
+  default     = "15179979"
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository ID, required to build the immutable OIDC subject claim format now used by this repository."
+  type        = string
+  default     = "1313745460"
+}
+
 variable "github_oidc_environments" {
   description = "GitHub Environments (e.g. dev, prod) allowed to federate. A federated credential is created per environment plus one for the default branch."
   type        = list(string)

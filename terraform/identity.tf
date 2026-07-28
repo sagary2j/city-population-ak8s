@@ -18,6 +18,14 @@ resource "azuread_service_principal" "github_actions" {
   tags      = ["terraform", "github-actions", var.environment]
 }
 
+# GitHub now issues immutable `sub` claims for this repository (owner/repo
+# numeric IDs embedded, format `repo:OWNER@OWNER_ID/REPO@REPO_ID:...`) instead
+# of the legacy `repo:owner/repo:...` format. See var.github_owner_id /
+# var.github_repo_id for how to look these values up.
+locals {
+  github_immutable_repo = "${split("/", var.github_repository)[0]}@${var.github_owner_id}/${split("/", var.github_repository)[1]}@${var.github_repo_id}"
+}
+
 # One federated credential per allowed GitHub Environment (e.g. dev, prod --
 # matches the `environment:` key in the deploy job of ci-cd.yaml), plus one
 # for direct pushes to the default branch (used by the Terraform plan/apply
@@ -30,7 +38,7 @@ resource "azuread_application_federated_identity_credential" "github_environment
   description    = "Trusts GitHub Actions runs deployed under the '${each.value}' Environment."
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_repository}:environment:${each.value}"
+  subject        = "repo:${local.github_immutable_repo}:environment:${each.value}"
 }
 
 resource "azuread_application_federated_identity_credential" "github_default_branch" {
@@ -41,7 +49,7 @@ resource "azuread_application_federated_identity_credential" "github_default_bra
   description    = "Trusts GitHub Actions runs triggered from the default branch (e.g. Terraform plan/apply)."
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_repository}:ref:refs/heads/${var.github_default_branch}"
+  subject        = "repo:${local.github_immutable_repo}:ref:refs/heads/${var.github_default_branch}"
 }
 
 resource "azuread_application_federated_identity_credential" "github_pull_requests" {
@@ -52,7 +60,7 @@ resource "azuread_application_federated_identity_credential" "github_pull_reques
   description    = "Trusts GitHub Actions runs on pull_request events (for `terraform plan` on PRs)."
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_repository}:pull_request"
+  subject        = "repo:${local.github_immutable_repo}:pull_request"
 }
 
 # --- Least-privilege role assignments for the CI/CD identity ---------------

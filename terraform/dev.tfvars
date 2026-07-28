@@ -13,11 +13,13 @@ api_server_authorized_ip_ranges = []
 enable_private_cluster          = true
 
 kubernetes_version  = "1.35"
-system_node_count   = 2
+# Subscription is capped at 4 total vCPUs in this region: 1 system node +
+# 1 user node of Standard_D2ds_v7 (2 vCPU each) = 4 vCPU total, no headroom.
+system_node_count   = 1
 system_node_vm_size = "Standard_D2ds_v7"
-user_node_min_count = 2
-user_node_max_count = 2
-user_node_vm_size   = "Standard_D4ds_v7"
+user_node_min_count = 1
+user_node_max_count = 1
+user_node_vm_size   = "Standard_D2ds_v7"
 
 # Azure AD group(s) that should get cluster-admin via Azure AD RBAC.
 # Find with: az ad group show --group "<name>" --query id -o tsv

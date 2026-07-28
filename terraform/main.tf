@@ -192,6 +192,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   mode                  = "User"
   max_pods              = 50
   os_disk_type          = "Ephemeral"
+  os_disk_size_gb       = 64
   auto_scaling_enabled  = true
   min_count             = var.user_node_min_count
   max_count             = var.user_node_max_count
@@ -199,6 +200,10 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
     "workload" = "city-population"
   }
   tags = local.common_tags
+
+  upgrade_settings {
+    max_surge = "33%"
+  }
 
   lifecycle {
     ignore_changes = [node_count]
