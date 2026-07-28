@@ -1,16 +1,4 @@
 name: CI/CD - City Population API
-
-# ---------------------------------------------------------------------------
-# This pipeline follows a GitOps deployment model: it never talks to the
-# cluster directly with `kubectl apply`. Instead, once an image is built,
-# scanned, and pushed to ACR, the pipeline updates the image tag in
-# helm/values.yaml and commits that change back to the repository.
-# ArgoCD (argocd/application.yaml), which continuously watches this repo,
-# then detects the change and syncs it to AKS. This keeps the cluster state
-# reconciled against Git as the single source of truth, and means the
-# GitHub Actions identity never needs cluster-admin / kubectl-apply rights.
-# ---------------------------------------------------------------------------
-
 on:
   push:
     branches: 
@@ -27,12 +15,13 @@ on:
       - "app/**"
       - "Dockerfile"
       - "helm/**"
+  workflow_dispatch: {}
 
 permissions:
   id-token: write     # required for Azure OIDC login (no stored secrets)
-  contents: write      # required to commit the GitOps image-tag bump
-  pull-requests: write  # required to post scan-summary PR comments
-  security-events: write # required to upload SARIF (Trivy, Bandit) to code scanning
+  contents: write     # required to commit the GitOps image-tag bump
+  pull-requests: write     # required to post scan-summary PR comments
+  security-events: write     # required to upload SARIF (Trivy, Bandit) to code scanning
 
 env:
   REGISTRY_REPOSITORY: city-population-api
@@ -234,7 +223,7 @@ jobs:
     name: Build, Scan & Push Image
     runs-on: ubuntu-latest
     needs: [test-and-scan, iac-scan]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment: ${{ github.ref_name == 'main' && 'dev' || '' }}
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
@@ -292,22 +281,22 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy-image
 
-      # - name: Push image to ACR
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: .
-      #     file: Dockerfile
-      #     push: true
-      #     tags: ${{ steps.meta.outputs.image_ref }}
-      #     cache-from: type=gha
+      - name: Push image to ACR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image_ref }}
+          cache-from: type=gha
 
-      # - name: Sign image (cosign, keyless via OIDC)
-      #   env:
-      #     COSIGN_EXPERIMENTAL: "1"
-      #   run: |
-      #     curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
-      #     chmod +x cosign
-      #     ./cosign sign --yes "${{ steps.meta.outputs.image_ref }}"
+      - name: Sign image (cosign, keyless via OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
+          chmod +x cosign
+          ./cosign sign --yes "${{ steps.meta.outputs.image_ref }}"
 
   # =========================================================================
   # 4. GitOps deploy: bump the image tag Helm consumes; ArgoCD takes it from there
