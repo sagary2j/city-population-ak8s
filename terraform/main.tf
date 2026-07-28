@@ -131,16 +131,21 @@ resource "azurerm_container_registry" "main" {
 # ---------------------------------------------------------------------------
 # AKS Cluster
 #
-# NOTE: host_encryption_enabled on the node pools below requires the
-# Microsoft.Compute/EncryptionAtHost feature to be registered on the
-# subscription before the first `apply` that creates node pools:
-#   az feature register --namespace Microsoft.Compute --name EncryptionAtHost
-#   az provider register -n Microsoft.Compute
-# (one-time, subscription-level; safe to run repeatedly / idempotent).
+# NOTE: host_encryption_enabled on the node pools is disabled (see
+# CKV_AZURE_227 skip below) -- this subscription is a Free Trial, which
+# is ineligible for quota adjustments (Azure Portal: "Free trials are not
+# eligible for quota adjustment. Upgrade your subscription first."). The
+# subscription is capped at 4 total vCPUs/region (already fully used by
+# the system+user node pools), and enabling host encryption requires
+# `temporary_name_for_rotation`, which needs 2 extra vCPUs of headroom to
+# create a temporary node pool during the property rotation -- not
+# available here. Revisit once the subscription is upgraded to Pay-As-You-Go
+# (or any tier eligible for quota increases).
 # ---------------------------------------------------------------------------
 #checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
   #checkov:skip=CKV_AZURE_117:Cluster uses host encryption + platform-managed encryption; DES/CMK rollout is externalized.
+  #checkov:skip=CKV_AZURE_227:Host encryption needs temporary_name_for_rotation, which requires 2 extra vCPUs during rotation; this Free Trial subscription is capped at 4 vCPUs/region (fully used) and ineligible for quota increases. Revisit after subscription upgrade.
   name                    = "${local.name_prefix}-aks"
   resource_group_name     = azurerm_resource_group.main.name
   location                = azurerm_resource_group.main.location
@@ -176,14 +181,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     only_critical_addons_enabled = true # keep app workloads off the system pool
     os_disk_size_gb              = 64
     os_disk_type                 = "Ephemeral"
-    host_encryption_enabled      = true # encrypts temp disk/cache data flowing between Compute and Storage
-    # Required by azurerm whenever certain default_node_pool properties
-    # (host_encryption_enabled, os_disk_type, vm_size, etc.) change in-place:
-    # a temporary node pool with this name is created, workloads are
-    # migrated onto it, the "system" pool is recreated with the new
-    # settings, then workloads move back and the temp pool is deleted.
-    # Must be <=12 chars, lowercase alphanumeric only.
-    temporary_name_for_rotation = "temprotate"
+    host_encryption_enabled      = false # see CKV_AZURE_227 skip above -- Free Trial subscription quota cap
     upgrade_settings {
       max_surge = "33%"
     }
@@ -239,7 +237,9 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 }
 
+#checkov:skip=CKV_AZURE_227:Host encryption needs temporary_name_for_rotation, which requires 2 extra vCPUs during rotation; this Free Trial subscription is capped at 4 vCPUs/region (fully used) and ineligible for quota increases. Revisit after subscription upgrade.
 resource "azurerm_kubernetes_cluster_node_pool" "user" {
+  #checkov:skip=CKV_AZURE_227:Host encryption needs temporary_name_for_rotation, which requires 2 extra vCPUs during rotation; this Free Trial subscription is capped at 4 vCPUs/region (fully used) and ineligible for quota increases. Revisit after subscription upgrade.
   name                    = "user"
   kubernetes_cluster_id   = azurerm_kubernetes_cluster.main.id
   vm_size                 = var.user_node_vm_size
@@ -248,13 +248,10 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   max_pods                = 50
   os_disk_type            = "Ephemeral"
   os_disk_size_gb         = 64
-  host_encryption_enabled = true # encrypts temp disk/cache data flowing between Compute and Storage
-  # See default_node_pool's comment above -- required by azurerm whenever
-  # host_encryption_enabled (and similar properties) change in-place.
-  temporary_name_for_rotation = "temprotate"
-  auto_scaling_enabled        = true
-  min_count                   = var.user_node_min_count
-  max_count                   = var.user_node_max_count
+  host_encryption_enabled = false # see CKV_AZURE_227 skip above -- Free Trial subscription quota cap
+  auto_scaling_enabled    = true
+  min_count               = var.user_node_min_count
+  max_count               = var.user_node_max_count
   node_labels = {
     "workload" = "city-population"
   }
