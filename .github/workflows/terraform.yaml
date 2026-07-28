@@ -11,6 +11,7 @@ on:
     branches: [main]
     paths:
       - "terraform/**"
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
