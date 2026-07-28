@@ -73,8 +73,9 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
+          set -o pipefail
           terraform plan \
-            -var-file="${{ vars.TFVARS_FILE || 'dev.tfvars.example' }}" \
+            -var-file="${{ vars.TFVARS_FILE || 'dev.tfvars' }}" \
             -out=tfplan \
             -no-color | tee plan_output.txt
 
@@ -141,7 +142,7 @@ jobs:
   #         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   #       run: |
   #         terraform apply \
-  #           -var-file="${{ vars.TFVARS_FILE || 'dev.tfvars.example' }}" \
+  #           -var-file="${{ vars.TFVARS_FILE || 'dev.tfvars' }}" \
   #           -auto-approve
 
   #     - name: Export outputs for downstream jobs
