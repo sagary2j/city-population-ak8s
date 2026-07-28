@@ -106,3 +106,23 @@ resource "azurerm_role_assignment" "github_tfstate_access" {
 # Administrator, scoped to this resource group) permissions to manage
 # infrastructure; grant that separately and only to the workflow/environment
 # that runs `terraform apply`, keeping the app build/deploy identity minimal.
+#
+# `terraform plan` still needs read access to every resource it manages (it
+# refreshes current state before diffing), in both the workload RG and the
+# remote state RG -- Reader is the minimum role that satisfies this without
+# granting write access.
+resource "azurerm_role_assignment" "github_tfstate_rg_reader" {
+  count = var.create_github_oidc_identity ? 1 : 0
+
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.tfstate_resource_group_name}"
+  role_definition_name = "Reader"
+  principal_id         = azuread_service_principal.github_actions[0].object_id
+}
+
+resource "azurerm_role_assignment" "github_workload_rg_reader" {
+  count = var.create_github_oidc_identity ? 1 : 0
+
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "Reader"
+  principal_id         = azuread_service_principal.github_actions[0].object_id
+}
