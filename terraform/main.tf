@@ -54,6 +54,30 @@ resource "azurerm_subnet_network_security_group_association" "aks" {
   network_security_group_id = azurerm_network_security_group.aks.id
 }
 
+# Allows the ArgoCD UI's public LoadBalancer (Service type=LoadBalancer,
+# created out-of-band by scripts/bootstrap-argocd.sh's --expose-ui flag) to
+# actually receive traffic. The custom NSG on this subnet has no inbound
+# allow rule for internet-sourced traffic by default (only the platform
+# defaults: AllowVnetInBound / AllowAzureLoadBalancerInBound / DenyAllInBound),
+# so without this rule the LB's public IP times out even once the Service +
+# Azure LB itself are correctly configured. Only created when
+# argocd_ui_allowed_cidrs is non-empty -- leave it empty to keep the subnet
+# fully closed to inbound internet traffic.
+resource "azurerm_network_security_rule" "argocd_ui" {
+  count                       = length(var.argocd_ui_allowed_cidrs) > 0 ? 1 : 0
+  name                        = "AllowArgoCDUIInbound"
+  priority                    = 200
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "443"
+  source_address_prefixes     = var.argocd_ui_allowed_cidrs
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.main.name
+  network_security_group_name = azurerm_network_security_group.aks.name
+}
+
 # ---------------------------------------------------------------------------
 # Log Analytics (Container Insights / observability backbone, see README Part D)
 # ---------------------------------------------------------------------------

@@ -61,6 +61,19 @@ variable "enable_private_cluster" {
   default     = true
 }
 
+variable "argocd_ui_allowed_cidrs" {
+  description = <<-EOT
+    CIDR ranges (e.g. ["203.0.113.4/32"]) allowed to reach the ArgoCD UI's
+    public LoadBalancer on port 443. Leave empty (default) to keep ArgoCD
+    unreachable from the internet -- the NSG allow rule is only created when
+    this list is non-empty. Scripts/bootstrap-argocd.sh's --expose-ui flag
+    also sets the matching Kubernetes Service loadBalancerSourceRanges, so
+    both layers (NSG + Service) must agree for access to actually work.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 # ---------------------------------------------------------------------------
 # AKS
 # ---------------------------------------------------------------------------
