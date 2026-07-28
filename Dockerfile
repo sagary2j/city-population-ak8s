@@ -33,6 +33,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PORT=8000
 
+# The base image's system-level pip/setuptools/wheel (bootstrapped via
+# ensurepip when this image was built) lag behind upstream security fixes,
+# e.g. CVE-2026-24049 (wheel), CVE-2026-8643 (pip). The app itself never
+# uses these (it only runs from /opt/venv), so patch them here too -- Trivy
+# scans the whole image, not just the venv.
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && rm -rf /root/.cache/pip
+
 # Dedicated non-root, non-login system user/group.
 RUN groupadd --system --gid 10001 appgroup \
     && useradd --system --uid 10001 --gid appgroup --no-create-home \
