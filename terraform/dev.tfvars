@@ -14,17 +14,19 @@ enable_private_cluster          = true
 
 kubernetes_version  = "1.35"
 system_node_count   = 2
-system_node_vm_size = "Standard_D2s_v5"
+system_node_vm_size = "Standard_D2ds_v7"
 user_node_min_count = 2
 user_node_max_count = 2
-user_node_vm_size   = "Standard_D4s_v5"
+user_node_vm_size   = "Standard_D4ds_v7"
 
 # Azure AD group(s) that should get cluster-admin via Azure AD RBAC.
 # Find with: az ad group show --group "<name>" --query id -o tsv
 aks_admin_group_object_ids = []
 
 acr_sku               = "Premium"
-acr_replica_locations = ["westus"]
+# westus does not support Availability Zones, which georeplications requires
+# (zone_redundancy_enabled = true); northeurope pairs well with eastus/westeurope.
+acr_replica_locations = ["northeurope"]
 
 create_github_oidc_identity = true
 github_repository           = "sagary2j/city-population-ak8s"
