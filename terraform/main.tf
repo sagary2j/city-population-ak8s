@@ -74,12 +74,13 @@ resource "azurerm_log_analytics_workspace" "main" {
 resource "azurerm_container_registry" "main" {
   #checkov:skip=CKV_AZURE_167:Retention policy block unavailable in pinned azurerm provider schema for this stack.
   #checkov:skip=CKV_AZURE_164:Image trust is enforced in CI/CD via signing/verification workflow controls.
+  #checkov:skip=CKV_AZURE_137:Public network access is required so GitHub-hosted Actions runners (public IPs) can push/pull; access is still gated by AAD auth + RBAC (AcrPush), not anonymous.
   name                          = local.acr_name
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location
   sku                           = var.acr_sku
   admin_enabled                 = false # CI/CD authenticates via OIDC + AcrPush role, not admin creds
-  public_network_access_enabled = false
+  public_network_access_enabled = true  # GitHub-hosted runners have no VNet access; AAD auth + AcrPush RBAC is the real access gate
   data_endpoint_enabled         = true
   zone_redundancy_enabled       = true
   quarantine_policy_enabled     = true
