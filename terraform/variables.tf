@@ -25,8 +25,8 @@ variable "tags" {
   description = "Common resource tags applied to everything this stack creates."
   type        = map(string)
   default = {
-    workload    = "city-population-api"
-    managed_by  = "terraform"
+    workload   = "city-population-api"
+    managed_by = "terraform"
   }
 }
 

@@ -8,7 +8,7 @@
 #checkov:skip=CKV2_AZURE_32:Private endpoint is implemented as a separate azurerm_private_endpoint resource with the same conditional count; this skip avoids graph-resolution false positives in CI.
 resource "azurerm_key_vault" "main" {
   #checkov:skip=CKV2_AZURE_32:Private endpoint exists in this module (azurerm_private_endpoint.key_vault), but graph check can false-positive with conditional resources.
-  count = var.enable_key_vault ? 1 : 0
+  count                         = var.enable_key_vault ? 1 : 0
   name                          = "${substr(local.name_prefix, 0, 15)}-kv-${random_string.suffix.result}"
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location

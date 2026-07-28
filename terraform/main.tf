@@ -1,6 +1,6 @@
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
-  acr_name = replace("${var.project_name}${var.environment}acr${random_string.suffix.result}", "-", "")
+  acr_name    = replace("${var.project_name}${var.environment}acr${random_string.suffix.result}", "-", "")
 
   common_tags = merge(var.tags, {
     environment = var.environment

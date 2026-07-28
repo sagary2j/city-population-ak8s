@@ -12,7 +12,7 @@ aks_subnet_address_prefix = ["10.20.1.0/24"]
 api_server_authorized_ip_ranges = []
 enable_private_cluster          = true
 
-kubernetes_version  = "1.35"
+kubernetes_version = "1.35"
 # Subscription is capped at 4 total vCPUs in this region: 1 system node +
 # 1 user node of Standard_D2ds_v7 (2 vCPU each) = 4 vCPU total, no headroom.
 system_node_count   = 1
@@ -25,7 +25,7 @@ user_node_vm_size   = "Standard_D2ds_v7"
 # Find with: az ad group show --group "<name>" --query id -o tsv
 aks_admin_group_object_ids = []
 
-acr_sku               = "Premium"
+acr_sku = "Premium"
 # westus does not support Availability Zones, which georeplications requires
 # (zone_redundancy_enabled = true); northeurope pairs well with eastus/westeurope.
 acr_replica_locations = ["northeurope"]
