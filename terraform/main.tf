@@ -177,6 +177,13 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_size_gb              = 64
     os_disk_type                 = "Ephemeral"
     host_encryption_enabled      = true # encrypts temp disk/cache data flowing between Compute and Storage
+    # Required by azurerm whenever certain default_node_pool properties
+    # (host_encryption_enabled, os_disk_type, vm_size, etc.) change in-place:
+    # a temporary node pool with this name is created, workloads are
+    # migrated onto it, the "system" pool is recreated with the new
+    # settings, then workloads move back and the temp pool is deleted.
+    # Must be <=12 chars, lowercase alphanumeric only.
+    temporary_name_for_rotation = "temprotate"
     upgrade_settings {
       max_surge = "33%"
     }
@@ -242,9 +249,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   os_disk_type            = "Ephemeral"
   os_disk_size_gb         = 64
   host_encryption_enabled = true # encrypts temp disk/cache data flowing between Compute and Storage
-  auto_scaling_enabled    = true
-  min_count               = var.user_node_min_count
-  max_count               = var.user_node_max_count
+  # See default_node_pool's comment above -- required by azurerm whenever
+  # host_encryption_enabled (and similar properties) change in-place.
+  temporary_name_for_rotation = "temprotate"
+  auto_scaling_enabled        = true
+  min_count                   = var.user_node_min_count
+  max_count                   = var.user_node_max_count
   node_labels = {
     "workload" = "city-population"
   }
