@@ -84,6 +84,23 @@ resource "azurerm_role_assignment" "github_aks_cluster_user" {
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
 
+# Read/write the Terraform remote state blob (terraform init/plan/apply in
+# CI authenticate to the azurerm backend via this SP's OIDC token, so it
+# needs data-plane access to the state container). Pair with
+# -backend-config="use_azuread_auth=true" in the workflow's `terraform init`.
+data "azurerm_storage_account" "tfstate" {
+  name                = var.tfstate_storage_account_name
+  resource_group_name = var.tfstate_resource_group_name
+}
+
+resource "azurerm_role_assignment" "github_tfstate_access" {
+  count = var.create_github_oidc_identity ? 1 : 0
+
+  scope                = data.azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azuread_service_principal.github_actions[0].object_id
+}
+
 # NOTE: intentionally NOT granted Contributor on the resource group. The
 # Terraform plan/apply workflow needs broader (Contributor + User Access
 # Administrator, scoped to this resource group) permissions to manage

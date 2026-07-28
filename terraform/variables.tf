@@ -157,6 +157,22 @@ variable "github_repo_id" {
   default     = "1313745460"
 }
 
+# Remote state storage account, bootstrapped out-of-band by
+# scripts/bootstrap-tfstate.sh (see versions.tf). Referenced here only to
+# grant the CI identity RBAC access to it -- this stack does not manage
+# (create/destroy) these resources.
+variable "tfstate_resource_group_name" {
+  description = "Resource group holding the Terraform remote state storage account."
+  type        = string
+  default     = "citypop-dev-tfstate-rg"
+}
+
+variable "tfstate_storage_account_name" {
+  description = "Storage account holding the Terraform remote state container."
+  type        = string
+  default     = "citypopdevtfstate5176"
+}
+
 variable "github_oidc_environments" {
   description = "GitHub Environments (e.g. dev, prod) allowed to federate. A federated credential is created per environment plus one for the default branch."
   type        = list(string)
