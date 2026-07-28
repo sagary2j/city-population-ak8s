@@ -13,7 +13,9 @@ name: CI/CD - City Population API
 
 on:
   push:
-    branches: [main,feature/build-deploy-acr]
+    branches: 
+      - main
+      - feature/build-deploy-acr
     paths:
       - "app/**"
       - "Dockerfile"

@@ -2,7 +2,9 @@ name: Terraform - AKS Infrastructure
 
 on:
   push:
-    branches: [main]
+    branches: 
+      - main
+      - feature/build-deploy-acr
     paths:
       - "terraform/**"
   pull_request:
