@@ -23,6 +23,19 @@ spec:
         - values.yaml
       # releaseName keeps resource names stable across re-creations of the Application.
       releaseName: city-population
+      parameters:
+        # AKS's built-in Azure Policy (Gatekeeper) blocks privileged and
+        # root-running containers (k8sazurev2noprivilege,
+        # k8sazurev3allowedusersgroups), so these init containers can never
+        # run here. They're also unnecessary on this cluster: the node image
+        # already ships vm.max_map_count=1048576 (well above ES's 262144
+        # requirement), and the Azure Disk CSI driver applies `fsGroup`
+        # ownership on mount, so the data dir is already writable by the ES
+        # user without an explicit chown step.
+        - name: elasticsearch.initContainers.fixVmMaxMapCount.enabled
+          value: "false"
+        - name: elasticsearch.initContainers.fixDataPermissions.enabled
+          value: "false"
 
   destination:
     server: https://kubernetes.default.svc
