@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: city-population
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: City Population API -- application and its Elasticsearch data layer.
+
+  sourceRepos:
+    - "https://github.com/sagary2j/city-population-ak8s.git"
+
+  destinations:
+    - namespace: city-population
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true
+
+  roles:
+    - name: readonly
+      description: Read-only access for the team to view sync status/history.
+      policies:
+        - p, proj:city-population:readonly, applications, get, city-population/*, allow
+      groups:
+        - city-population-team

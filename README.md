@@ -33,7 +33,7 @@ sre-city-population/
 │   ├── key_vault.tf                 # Azure Key Vault + AKS CSI wiring
 │   ├── identity.tf                  # GitHub OIDC App Registration + role assignments
 │   ├── outputs.tf
-│   └── dev.tfvars.example
+│   └── dev.tfvars
 ├── .github/workflows/
 │   ├── ci-cd.yaml                  # Part F: lint/test/scan/build/push/GitOps update
 │   └── terraform.yaml              # Plan on PR, apply on merge to main
@@ -103,10 +103,8 @@ curl -i http://localhost:8000/cities/Atlantis
 # {"error":"city_not_found","detail":"No population data found for city 'Atlantis'.","request_id":"..."}
 ```
 
-
 Interactive API docs (Swagger UI) are available at `http://localhost:8000/docs`.
 
-Tear down: `docker compose down -v`
 
 ### 2. Build the container image directly
 
@@ -115,13 +113,6 @@ docker build -t city-population-api:1.0.0 .
 ```
 
 ### 3. Spin up a local Kubernetes cluster
-
-**Using Kind:**
-
-```bash
-kind create cluster --name city-population
-kind load docker-image city-population-api:1.0.0 --name city-population
-```
 
 **Using Minikube:**
 
@@ -191,9 +182,9 @@ Vault, and an Azure AD App Registration federated for GitHub Actions OIDC
 # 1. Bootstrap the remote state storage account (idempotent, run once per env)
 ./scripts/bootstrap-tfstate.sh dev westeurope
 
-# 2. Copy and edit the tfvars for your environment
+# 2. Edit the tfvars for your environment if any changes
 cd terraform
-cp dev.tfvars.example dev.tfvars
+vim dev.tfvars
 # set github_repository to your actual "org/repo"
 
 # 3. Init with the backend values printed by the bootstrap script
@@ -201,7 +192,12 @@ terraform init \
   -backend-config="resource_group_name=<tfstate-rg>" \
   -backend-config="storage_account_name=<tfstate-sa>" \
   -backend-config="container_name=tfstate" \
-  -backend-config="key=city-population/dev.tfstate"
+  -backend-config="key=city-population/dev.tfstate" \
+  -backend-config="use_azuread_auth=true"
+# `use_azuread_auth=true` authenticates to the state storage account via your
+# `az login`/OIDC identity's RBAC role (Storage Blob Data Contributor) rather
+# than a storage account access key -- no key ever needs to be generated or
+# stored. The same flag is used by both GitHub Actions workflows below.
 
 # 4. Plan and apply
 terraform plan  -var-file=dev.tfvars
@@ -229,10 +225,29 @@ In the GitHub repo (Settings → Secrets and variables → Actions), set:
 | `ACR_LOGIN_SERVER` | Variable | `acr_login_server` output |
 | `TF_STATE_RG` / `TF_STATE_SA` / `TF_STATE_CONTAINER` / `TF_STATE_KEY` | Variables | printed by `bootstrap-tfstate.sh` |
 
+Set the three `AZURE_*` values as **Secrets** and everything else as
+**Variables** only -- `${{ secrets.* }}` and `${{ vars.* }}` are looked up
+independently, so a name defined in both resolves to the Secret and can mask
+a Variable update. Only `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/
+`AZURE_SUBSCRIPTION_ID` need Secret-level protection (and even those aren't
+truly sensitive on their own, since OIDC still requires the matching
+federated credential's trust conditions to be met); the rest are plain
+config and don't need to be write-protected as Secrets.
+
 No password/secret ever needs to be stored: `AZURE_CLIENT_ID` +
 `AZURE_TENANT_ID` + `AZURE_SUBSCRIPTION_ID` are used with `azure/login@v2`'s
 OIDC flow, trusted via the federated credentials created in
 `terraform/identity.tf` (scoped to this exact repo + GitHub Environment).
+
+> **GitHub's immutable OIDC subject claims:** for repos created/renamed/
+> transferred after 2026-07-15, GitHub issues federated token `sub` claims
+> with numeric owner/repo IDs embedded (`repo:OWNER@OWNER_ID/REPO@REPO_ID:...`)
+> instead of the legacy `repo:owner/repo:...` format. If `azure/login@v2`
+> fails with `AADSTS700213: No matching federated identity record found`,
+> set `github_owner_id`/`github_repo_id` in `dev.tfvars` to the numeric IDs
+> from `https://api.github.com/repos/<owner>/<repo>` (`.id` and `.owner.id`)
+> and re-apply -- `terraform/identity.tf` builds the federated credential
+> `subject` from these.
 
 Get cluster credentials locally:
 
@@ -272,19 +287,27 @@ $(terraform output -raw get_credentials_command)
 7. **Push & sign** — only after every prior gate passes, the image is
    pushed to ACR and keylessly signed with `cosign` (using the same GitHub
    OIDC identity — no signing key to manage/rotate).
-8. **GitOps update** — the pipeline does **not** run `kubectl apply` or
-   `helm upgrade` itself. It bumps `app.image.tag` (and
-   `app.image.repository`) in `helm/values.yaml` and commits that change
-   back to `main`. ArgoCD (Part G) detects the commit and reconciles the
-   cluster — the classic GitOps split between CI (build/test/scan) and CD
-   (sync), which also means the CI identity never needs cluster-admin.
+8. **GitOps update** *(scaffolded, currently disabled)* — the pipeline does
+   **not** run `kubectl apply` or `helm upgrade` itself. The `update-manifests`
+   job (commented out in `ci-cd.yaml` pending manual enablement) is meant to
+   bump `app.image.tag` (and `app.image.repository`) in `helm/values.yaml`
+   and commit that change back to `main`; ArgoCD (Part G) would then detect
+   the commit and reconcile the cluster — the classic GitOps split between
+   CI (build/test/scan) and CD (sync), which also means the CI identity
+   never needs cluster-admin. Until that job is uncommented, bump
+   `helm/values.yaml`'s image tag manually (or via `helm upgrade --set
+   app.image.tag=<tag>`) after a successful build.
 
 `.github/workflows/terraform.yaml` is a separate pipeline for
-infrastructure changes: `terraform plan` runs on every PR touching
-`terraform/` and is posted as a PR comment for review; `terraform apply`
-runs only on merge to `main`, gated behind the `dev` GitHub Environment
-(configure required reviewers there for a manual approval gate before
-infrastructure changes land).
+infrastructure changes: `terraform plan` runs on every PR (and every push)
+touching `terraform/` and is posted as a PR comment for review, with its
+output saved as the `tfplan` artifact; `terraform apply` runs only on merge
+to `main`, gated behind the `dev` GitHub Environment (configure required
+reviewers there for a manual approval gate before infrastructure changes
+land). The `apply` job downloads that same `tfplan` artifact and runs
+`terraform apply tfplan`, so it applies exactly what was reviewed rather
+than re-planning at apply time. Both workflows also support
+`workflow_dispatch` for on-demand manual runs.
 
 **Why two pipelines?** The app pipeline's identity only needs `AcrPush` +
 AKS "Cluster User" (read kubeconfig) — it can't modify infrastructure. The
@@ -298,29 +321,36 @@ above) but can't, say, open up the AKS API server to the internet.
 
 ## GitOps Deployment (ArgoCD)
 
-### Install ArgoCD on the cluster (one-time)
+If the AKS API server is fully private (`enable_private_cluster = true` and
+`api_server_authorized_ip_ranges = []`, the default in `dev.tfvars`), direct
+`kubectl`/`az aks get-credentials` access never works from a local machine
+or GitHub-hosted runner. All commands below therefore run through
+[`scripts/bootstrap-argocd.sh`](scripts/bootstrap-argocd.sh), which uses
+`az aks command invoke` (executes kubectl inside the cluster via the ARM
+control plane) instead of a direct connection — this works regardless of
+network reachability, as long as the cluster is running and the caller has
+`Microsoft.ContainerService/managedClusters/runCommand/action` (covered by
+the `Contributor` role already granted in `terraform/identity.tf`). If your
+cluster does have direct API server access (e.g. `enable_private_cluster =
+false`, or you're on a VPN/self-hosted runner with connectivity), the same
+`kubectl`/`argocd` commands work as-is — just drop the `az aks command
+invoke --command "..."` wrapper.
+
+### Install ArgoCD + register the app (one command)
 
 ```bash
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-kubectl -n argocd rollout status deployment/argocd-server
-
-# Initial admin password (rotate this immediately, or switch to SSO):
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
+./scripts/bootstrap-argocd.sh <resource-group> <cluster-name>
+# e.g. ./scripts/bootstrap-argocd.sh citypop-dev-rg citypop-dev-aks
 ```
 
-### Register the app
+This installs ArgoCD (idempotent — safe to re-run), applies
+`argocd/project.yaml` and `argocd/application.yaml`, and prints the
+resulting `Application` sync/health status. The script starts the cluster
+first if it's stopped, and waits for `provisioningState=Succeeded` before
+proceeding.
 
-```bash
-kubectl apply -f argocd/project.yaml
-kubectl apply -f argocd/application.yaml
-```
-
-Before applying, edit the `repoURL` in both files to point at your actual
-fork/repo (they default to a placeholder `your-org/city-population` URL,
-matching `github_repository` in your `terraform/dev.tfvars`).
+Use `--repo-url <url>` / `--revision <branch>` if you need to point at a
+fork or a non-default branch without editing the committed YAML.
 
 ### How it stays in sync
 
@@ -335,12 +365,35 @@ continuously reconciles the cluster to match it" model used in Part F.
 
 ### Access the ArgoCD UI
 
+**If the cluster has direct network access** (VPN/peered network/non-private
+cluster):
+
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 # https://localhost:8080  (user: admin)
 ```
 
-Or install the CLI and log in non-interactively:
+**If the cluster is fully private** (no direct network path), the only way
+to reach the UI from outside the cluster is a public LoadBalancer restricted
+to a specific source IP — both the Kubernetes Service AND the subnet's NSG
+have to allow it:
+
+1. Set `argocd_ui_allowed_cidrs = ["<your-public-ip>/32"]` in
+   `terraform/dev.tfvars` and `terraform apply -var-file=dev.tfvars`
+   (creates the NSG allow rule; empty by default, so the subnet stays
+   closed to inbound internet traffic otherwise).
+2. `./scripts/bootstrap-argocd.sh <rg> <cluster> --expose-ui <your-public-ip>/32`
+   — patches `argocd-server` to `type=LoadBalancer` with a matching
+   `loadBalancerSourceRanges`, waits for the external IP, and prints the
+   initial admin password.
+3. Browse to `https://<printed-external-ip>` (self-signed cert warning is
+   expected), log in with `admin` / the printed password, and rotate it
+   immediately (Settings → Accounts, or `argocd account update-password`).
+4. When done, revert both layers:
+   `./scripts/bootstrap-argocd.sh <rg> <cluster> --hide-ui`, then set
+   `argocd_ui_allowed_cidrs = []` back in `dev.tfvars` and re-apply.
+
+Either way, once you have a `kubectl`/port-forward path, the CLI also works:
 
 ```bash
 argocd login localhost:8080 --username admin --password <password> --insecure
