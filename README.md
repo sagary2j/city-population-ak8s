@@ -379,9 +379,18 @@ to a specific source IP — both the Kubernetes Service AND the subnet's NSG
 have to allow it:
 
 1. Set `argocd_ui_allowed_cidrs = ["<your-public-ip>/32"]` in
-   `terraform/dev.tfvars` and `terraform apply -var-file=dev.tfvars`
-   (creates the NSG allow rule; empty by default, so the subnet stays
-   closed to inbound internet traffic otherwise).
+   `terraform/dev.tfvars` and apply just that NSG rule:
+   ```bash
+   terraform apply -var-file=dev.tfvars \
+     -target=azurerm_network_security_rule.argocd_ui
+   ```
+   (empty by default, so the subnet stays closed to inbound internet
+   traffic otherwise). `-target` matters here: run a plain `terraform plan`
+   first and if it shows *other* pending changes unrelated to this rule
+   (e.g. from a change you haven't applied yet), a full `terraform apply`
+   would apply those too. Targeting just this resource keeps "expose the
+   ArgoCD UI" a self-contained, reviewable action. Drop `-target` only once
+   you've reviewed and want to apply everything pending.
 2. `./scripts/bootstrap-argocd.sh <rg> <cluster> --expose-ui <your-public-ip>/32`
    — patches `argocd-server` to `type=LoadBalancer` with a matching
    `loadBalancerSourceRanges`, waits for the external IP, and prints the
@@ -391,7 +400,9 @@ have to allow it:
    immediately (Settings → Accounts, or `argocd account update-password`).
 4. When done, revert both layers:
    `./scripts/bootstrap-argocd.sh <rg> <cluster> --hide-ui`, then set
-   `argocd_ui_allowed_cidrs = []` back in `dev.tfvars` and re-apply.
+   `argocd_ui_allowed_cidrs = []` back in `dev.tfvars` and re-apply (again,
+   `-target=azurerm_network_security_rule.argocd_ui` keeps this a
+   self-contained action).
 
 Either way, once you have a `kubectl`/port-forward path, the CLI also works:
 
