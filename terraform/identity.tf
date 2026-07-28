@@ -30,7 +30,9 @@ locals {
 # matches the `environment:` key in the deploy job of ci-cd.yaml), plus one
 # for direct pushes to the default branch (used by the Terraform plan/apply
 # workflow, which does not run inside a GitHub Environment).
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...), which is more precise than the legacy owner/repo format -- Checkov's repo-format regex predates this format and doesn't recognize the embedded numeric IDs, producing a false positive. The claim is still repo-scoped (no wildcards) and further scoped to a specific GitHub Environment.
 resource "azuread_application_federated_identity_credential" "github_environments" {
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
   for_each = var.create_github_oidc_identity ? toset(var.github_oidc_environments) : []
 
   application_id = azuread_application.github_actions[0].id
@@ -41,7 +43,9 @@ resource "azuread_application_federated_identity_credential" "github_environment
   subject        = "repo:${local.github_immutable_repo}:environment:${each.value}"
 }
 
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive. Claim is scoped to a single repo + the default branch ref, no wildcards.
 resource "azuread_application_federated_identity_credential" "github_default_branch" {
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
   count = var.create_github_oidc_identity ? 1 : 0
 
   application_id = azuread_application.github_actions[0].id
@@ -52,7 +56,9 @@ resource "azuread_application_federated_identity_credential" "github_default_bra
   subject        = "repo:${local.github_immutable_repo}:ref:refs/heads/${var.github_default_branch}"
 }
 
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive. Claim is scoped to a single repo + pull_request event, no wildcards.
 resource "azuread_application_federated_identity_credential" "github_pull_requests" {
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
   count = var.create_github_oidc_identity ? 1 : 0
 
   application_id = azuread_application.github_actions[0].id

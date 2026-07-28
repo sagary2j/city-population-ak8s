@@ -130,19 +130,34 @@ resource "azurerm_container_registry" "main" {
 
 # ---------------------------------------------------------------------------
 # AKS Cluster
+#
+# NOTE: host_encryption_enabled on the node pools below requires the
+# Microsoft.Compute/EncryptionAtHost feature to be registered on the
+# subscription before the first `apply` that creates node pools:
+#   az feature register --namespace Microsoft.Compute --name EncryptionAtHost
+#   az provider register -n Microsoft.Compute
+# (one-time, subscription-level; safe to run repeatedly / idempotent).
 # ---------------------------------------------------------------------------
 #checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
   #checkov:skip=CKV_AZURE_117:Cluster uses host encryption + platform-managed encryption; DES/CMK rollout is externalized.
-  name                              = "${local.name_prefix}-aks"
-  resource_group_name               = azurerm_resource_group.main.name
-  location                          = azurerm_resource_group.main.location
-  dns_prefix                        = "${local.name_prefix}-aks"
-  kubernetes_version                = var.kubernetes_version
-  sku_tier                          = "Standard"
-  private_cluster_enabled           = var.enable_private_cluster
-  azure_policy_enabled              = true
-  local_account_disabled            = length(var.aks_admin_group_object_ids) > 0
+  name                    = "${local.name_prefix}-aks"
+  resource_group_name     = azurerm_resource_group.main.name
+  location                = azurerm_resource_group.main.location
+  dns_prefix              = "${local.name_prefix}-aks"
+  kubernetes_version      = var.kubernetes_version
+  sku_tier                = "Standard"
+  private_cluster_enabled = var.enable_private_cluster
+  azure_policy_enabled    = true
+  # Direct kubeconfig/API server access never works for this private cluster
+  # from outside the VNet (see README) -- the only access path is
+  # `az aks command invoke`, which authenticates via Azure RBAC on the
+  # management plane, not local/kubeconfig accounts. Safe to disable local
+  # accounts unconditionally; azure_active_directory_role_based_access_control
+  # below still grants AAD group admin access when aks_admin_group_object_ids
+  # is populated.
+  local_account_disabled            = true
+  automatic_upgrade_channel         = var.aks_automatic_upgrade_channel
   role_based_access_control_enabled = true
   oidc_issuer_enabled               = true # required for Azure AD Workload Identity
   workload_identity_enabled         = true
@@ -159,6 +174,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     only_critical_addons_enabled = true # keep app workloads off the system pool
     os_disk_size_gb              = 64
     os_disk_type                 = "Ephemeral"
+    host_encryption_enabled      = true # encrypts temp disk/cache data flowing between Compute and Storage
     upgrade_settings {
       max_surge = "33%"
     }
@@ -218,17 +234,18 @@ resource "azurerm_kubernetes_cluster" "main" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "user" {
-  name                  = "user"
-  kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
-  vm_size               = var.user_node_vm_size
-  vnet_subnet_id        = azurerm_subnet.aks.id
-  mode                  = "User"
-  max_pods              = 50
-  os_disk_type          = "Ephemeral"
-  os_disk_size_gb       = 64
-  auto_scaling_enabled  = true
-  min_count             = var.user_node_min_count
-  max_count             = var.user_node_max_count
+  name                    = "user"
+  kubernetes_cluster_id   = azurerm_kubernetes_cluster.main.id
+  vm_size                 = var.user_node_vm_size
+  vnet_subnet_id          = azurerm_subnet.aks.id
+  mode                    = "User"
+  max_pods                = 50
+  os_disk_type            = "Ephemeral"
+  os_disk_size_gb         = 64
+  host_encryption_enabled = true # encrypts temp disk/cache data flowing between Compute and Storage
+  auto_scaling_enabled    = true
+  min_count               = var.user_node_min_count
+  max_count               = var.user_node_max_count
   node_labels = {
     "workload" = "city-population"
   }

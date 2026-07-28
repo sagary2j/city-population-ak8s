@@ -6,8 +6,10 @@
 # rather than any static credential.
 
 #checkov:skip=CKV2_AZURE_32:Private endpoint is implemented as a separate azurerm_private_endpoint resource with the same conditional count; this skip avoids graph-resolution false positives in CI.
+#checkov:skip=CKV_AZURE_110:Purge protection is intentionally environment-gated (enabled only when environment=="prod") so this dev/take-home stack can be torn down immediately via `terraform destroy` without waiting out the soft-delete retention; production deployments get purge protection automatically.
 resource "azurerm_key_vault" "main" {
   #checkov:skip=CKV2_AZURE_32:Private endpoint exists in this module (azurerm_private_endpoint.key_vault), but graph check can false-positive with conditional resources.
+  #checkov:skip=CKV_AZURE_110:See resource-level skip above -- purge protection is environment-gated by design.
   count                         = var.enable_key_vault ? 1 : 0
   name                          = "${substr(local.name_prefix, 0, 15)}-kv-${random_string.suffix.result}"
   resource_group_name           = azurerm_resource_group.main.name
