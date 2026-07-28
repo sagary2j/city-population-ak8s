@@ -1,5 +1,4 @@
-name: Terraform - AKS Infrastructure
-
+name: Terraform - AKS Infrastructure Deployment
 on:
   push:
     branches: 
@@ -17,16 +16,6 @@ permissions:
   id-token: write
   contents: read
   pull-requests: write
-
-# Serializes ALL runs of this workflow (across branches, PRs, and dispatches)
-# against the single shared remote state file. Without this, two pushes
-# landing close together (e.g. a push to main and a push to
-# feature/build-deploy-acr both touching terraform/**) trigger overlapping
-# runs that both try to acquire the Azure Blob state lease during
-# `terraform plan`/`apply`, and one fails with a state lock error instead of
-# just waiting its turn. `cancel-in-progress: false` queues runs rather than
-# cancelling an in-flight plan/apply (cancelling mid-apply could leave
-# infrastructure partially applied).
 concurrency:
   group: terraform-state-city-population
   cancel-in-progress: false
