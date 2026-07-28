@@ -42,8 +42,8 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.elasticsearch.podSecurityContext | nindent 8 }}
-      {{- $fixVmMaxMapCountEnabled := (.Values.elasticsearch.initContainers.fixVmMaxMapCount.enabled | default true) }}
-      {{- $fixDataPermissionsEnabled := (.Values.elasticsearch.initContainers.fixDataPermissions.enabled | default true) }}
+      {{- $fixVmMaxMapCountEnabled := .Values.elasticsearch.initContainers.fixVmMaxMapCount.enabled }}
+      {{- $fixDataPermissionsEnabled := .Values.elasticsearch.initContainers.fixDataPermissions.enabled }}
       {{- if or $fixVmMaxMapCountEnabled $fixDataPermissionsEnabled }}
       # sysctl / permission prep for Elasticsearch. In clusters enforcing a
       # strict non-root policy, disable these init containers via values.
