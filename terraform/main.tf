@@ -152,10 +152,12 @@ resource "azurerm_kubernetes_cluster" "main" {
   # Direct kubeconfig/API server access never works for this private cluster
   # from outside the VNet (see README) -- the only access path is
   # `az aks command invoke`, which authenticates via Azure RBAC on the
-  # management plane, not local/kubeconfig accounts. Safe to disable local
-  # accounts unconditionally; azure_active_directory_role_based_access_control
-  # below still grants AAD group admin access when aks_admin_group_object_ids
-  # is populated.
+  # management plane, not local/kubeconfig accounts. Since Kubernetes 1.25,
+  # Azure requires AAD integration to be enabled on the cluster before
+  # local_account_disabled can be set to true, so
+  # azure_active_directory_role_based_access_control below is unconditional
+  # (managed AAD + Azure RBAC), even when aks_admin_group_object_ids is
+  # empty; admin group ids just add extra AAD-group cluster-admins on top.
   local_account_disabled            = true
   automatic_upgrade_channel         = var.aks_automatic_upgrade_channel
   role_based_access_control_enabled = true
@@ -184,13 +186,10 @@ resource "azurerm_kubernetes_cluster" "main" {
     type = "SystemAssigned"
   }
 
-  dynamic "azure_active_directory_role_based_access_control" {
-    for_each = length(var.aks_admin_group_object_ids) > 0 ? [1] : []
-    content {
-      tenant_id              = data.azurerm_client_config.current.tenant_id
-      admin_group_object_ids = var.aks_admin_group_object_ids
-      azure_rbac_enabled     = true
-    }
+  azure_active_directory_role_based_access_control {
+    tenant_id              = data.azurerm_client_config.current.tenant_id
+    admin_group_object_ids = var.aks_admin_group_object_ids
+    azure_rbac_enabled     = true
   }
 
   network_profile {
