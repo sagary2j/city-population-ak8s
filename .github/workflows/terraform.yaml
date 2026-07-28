@@ -79,77 +79,80 @@ jobs:
             -out=tfplan \
             -no-color | tee plan_output.txt
 
-  #     - name: Comment plan on PR
-  #       if: github.event_name == 'pull_request'
-  #       uses: actions/github-script@v7
-  #       with:
-  #         script: |
-  #           const fs = require('fs');
-  #           const plan = fs.readFileSync('terraform/plan_output.txt', 'utf8').slice(-60000);
-  #           github.rest.issues.createComment({
-  #             issue_number: context.issue.number,
-  #             owner: context.repo.owner,
-  #             repo: context.repo.repo,
-  #             body: `#### Terraform Plan\n<details><summary>Show plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`
-  #           });
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/plan_output.txt', 'utf8').slice(-60000);
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### Terraform Plan\n<details><summary>Show plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`
+            });
 
-  #     - name: Upload plan artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: tfplan
-  #         path: terraform/tfplan
-  #         retention-days: 5
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+          retention-days: 5
 
-  # apply:
-  #   name: Terraform Apply
-  #   runs-on: ubuntu-latest
-  #   needs: plan
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #   environment: dev # requires manual approval if the 'dev' Environment has protection rules configured
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev # requires manual approval if the 'dev' Environment has protection rules configured
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  #     - name: Azure login (OIDC)
-  #       uses: azure/login@v2
-  #       with:
-  #         client-id: ${{ secrets.AZURE_CLIENT_ID }}
-  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  #     - name: Set up Terraform
-  #       uses: hashicorp/setup-terraform@v3
-  #       with:
-  #         terraform_version: ${{ env.TF_VERSION }}
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-  #     - name: Terraform init
-  #       env:
-  #         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  #         ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  #         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  #       run: |
-  #         terraform init \
-  #           -backend-config="resource_group_name=${{ vars.TF_STATE_RG }}" \
-  #           -backend-config="storage_account_name=${{ vars.TF_STATE_SA }}" \
-  #           -backend-config="container_name=${{ vars.TF_STATE_CONTAINER }}" \
-  #           -backend-config="key=${{ vars.TF_STATE_KEY }}" \
-  #           -backend-config="use_azuread_auth=true"
+      - name: Terraform init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ vars.TF_STATE_SA }}" \
+            -backend-config="container_name=${{ vars.TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="use_azuread_auth=true"
 
-  #     - name: Terraform apply
-  #       env:
-  #         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  #         ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  #         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  #       run: |
-  #         terraform apply \
-  #           -var-file="${{ vars.TFVARS_FILE || 'dev.tfvars' }}" \
-  #           -auto-approve
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform
 
-  #     - name: Export outputs for downstream jobs
-  #       run: |
-  #         {
-  #           echo "### Terraform Outputs"
-  #           echo '```'
-  #           terraform output
-  #           echo '```'
-  #         } >> "$GITHUB_STEP_SUMMARY"
+      - name: Terraform apply
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Export outputs for downstream jobs
+        run: |
+          {
+            echo "### Terraform Outputs"
+            echo '```'
+            terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

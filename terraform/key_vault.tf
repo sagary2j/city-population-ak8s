@@ -79,10 +79,24 @@ resource "azurerm_role_assignment" "aks_kv_secrets_reader" {
 # Terraform's own identity gets Secrets Officer so it (or an operator) can
 # seed the initial ES credentials. In steady state, rotate these via a
 # separate, access-controlled process -- not via `terraform apply` on every run.
+#
+# Pinned to explicit, static principals (rather than the dynamic "current
+# caller" via data.azurerm_client_config.current.object_id) so this role
+# assignment doesn't flip-flop (force a replace) every time a different
+# identity -- a human operator locally vs. the CI service principal in
+# GitHub Actions -- runs `terraform apply`.
 resource "azurerm_role_assignment" "terraform_kv_admin" {
   count = var.enable_key_vault ? 1 : 0
 
   scope                = azurerm_key_vault.main[0].id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = var.terraform_operator_object_id
+}
+
+resource "azurerm_role_assignment" "github_kv_admin" {
+  count = var.enable_key_vault && var.create_github_oidc_identity ? 1 : 0
+
+  scope                = azurerm_key_vault.main[0].id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = azuread_service_principal.github_actions[0].object_id
 }

@@ -179,6 +179,15 @@ variable "github_oidc_environments" {
   default     = ["dev", "prod"]
 }
 
+# Static (non-dynamic) principal for the Key Vault admin role assignment in
+# key_vault.tf, so it doesn't flip-flop between whichever identity last ran
+# `terraform apply` (see terraform_kv_admin's comment for details).
+variable "terraform_operator_object_id" {
+  description = "Azure AD object ID of the human operator retaining Key Vault Secrets Officer access, independent of the CI identity."
+  type        = string
+  default     = "d0c0196a-a06b-485e-8ea1-3edde579b117"
+}
+
 variable "github_default_branch" {
   description = "Default branch allowed to federate for non-environment (e.g. plan-only) workflow runs."
   type        = string

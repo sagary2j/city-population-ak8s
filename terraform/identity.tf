@@ -101,16 +101,9 @@ resource "azurerm_role_assignment" "github_tfstate_access" {
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
 
-# NOTE: intentionally NOT granted Contributor on the resource group. The
-# Terraform plan/apply workflow needs broader (Contributor + User Access
-# Administrator, scoped to this resource group) permissions to manage
-# infrastructure; grant that separately and only to the workflow/environment
-# that runs `terraform apply`, keeping the app build/deploy identity minimal.
-#
-# `terraform plan` still needs read access to every resource it manages (it
-# refreshes current state before diffing), in both the workload RG and the
-# remote state RG -- Reader is the minimum role that satisfies this without
-# granting write access.
+# The tfstate RG itself is bootstrapped out-of-band (scripts/bootstrap-tfstate.sh)
+# and isn't managed by this stack, so the CI identity only ever needs to read
+# it (it refreshes state before every plan/apply) -- Reader is sufficient.
 resource "azurerm_role_assignment" "github_tfstate_rg_reader" {
   count = var.create_github_oidc_identity ? 1 : 0
 
@@ -119,10 +112,25 @@ resource "azurerm_role_assignment" "github_tfstate_rg_reader" {
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
 
-resource "azurerm_role_assignment" "github_workload_rg_reader" {
+# The workload RG IS managed by this stack, and `terraform apply` runs from
+# CI (see .github/workflows/terraform.yaml's `apply` job, gated behind the
+# `dev` GitHub Environment's manual approval). It therefore needs:
+# - Contributor: create/update/delete the resources this stack manages.
+# - User Access Administrator: manage the `azurerm_role_assignment` resources
+#   this same stack creates (github_acr_push, github_aks_cluster_user,
+#   terraform_kv_admin/github_kv_admin, etc.), all scoped within this RG.
+resource "azurerm_role_assignment" "github_workload_rg_contributor" {
   count = var.create_github_oidc_identity ? 1 : 0
 
   scope                = azurerm_resource_group.main.id
-  role_definition_name = "Reader"
+  role_definition_name = "Contributor"
+  principal_id         = azuread_service_principal.github_actions[0].object_id
+}
+
+resource "azurerm_role_assignment" "github_workload_rg_uaa" {
+  count = var.create_github_oidc_identity ? 1 : 0
+
+  scope                = azurerm_resource_group.main.id
+  role_definition_name = "User Access Administrator"
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
