@@ -18,9 +18,10 @@ COPY app/requirements.txt ./requirements.txt
 # Upgrade pip, setuptools, and wheel explicitly -- the versions bundled by
 # `python -m venv` (via ensurepip) are pinned to whatever shipped with the
 # base image and lag behind upstream security fixes (e.g. CVE-2026-24049 in
-# wheel, CVE-2026-8643 in pip).
+# wheel, CVE-2026-8643 in pip). Pinned exact versions to satisfy hadolint
+# DL3013 and avoid unpinned 'latest' drift in the build.
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------------------
@@ -37,8 +38,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # ensurepip when this image was built) lag behind upstream security fixes,
 # e.g. CVE-2026-24049 (wheel), CVE-2026-8643 (pip). The app itself never
 # uses these (it only runs from /opt/venv), so patch them here too -- Trivy
-# scans the whole image, not just the venv.
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+# scans the whole image, not just the venv. Pinned exact versions to
+# satisfy hadolint DL3013 and avoid unpinned 'latest' drift.
+RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && rm -rf /root/.cache/pip
 
 # Dedicated non-root, non-login system user/group.
