@@ -9,7 +9,7 @@ spec:
   description: City Population API -- application and its Elasticsearch data layer.
 
   sourceRepos:
-    - "https://github.com/your-org/city-population.git"
+    - "https://github.com/sagary2j/city-population-ak8s.git"
 
   destinations:
     - namespace: city-population

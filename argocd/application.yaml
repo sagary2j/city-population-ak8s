@@ -13,7 +13,7 @@ spec:
   project: city-population
 
   source:
-    repoURL: https://github.com/your-org/city-population.git
+    repoURL: https://github.com/sagary2j/city-population-ak8s.git
     targetRevision: main
     path: helm
     helm:
@@ -28,7 +28,7 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true      # remove resources that are deleted from Git
+      prune: true    # remove resources that are deleted from Git
       selfHeal: true    # revert manual `kubectl edit` drift back to Git state
       allowEmpty: false
     syncOptions:

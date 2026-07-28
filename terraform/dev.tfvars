@@ -24,7 +24,7 @@ user_node_vm_size   = "Standard_D4s_v5"
 aks_admin_group_object_ids = []
 
 acr_sku               = "Premium"
-acr_replica_locations = ["northeurope"]
+acr_replica_locations = ["westus"]
 
 create_github_oidc_identity = true
 github_repository           = "sagary2j/city-population-ak8s"
