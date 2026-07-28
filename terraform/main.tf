@@ -83,8 +83,14 @@ resource "azurerm_container_registry" "main" {
   public_network_access_enabled = true  # GitHub-hosted runners have no VNet access; AAD auth + AcrPush RBAC is the real access gate
   data_endpoint_enabled         = true
   zone_redundancy_enabled       = true
-  quarantine_policy_enabled     = true
-  tags                          = local.common_tags
+  # Quarantine requires an external scanner (Microsoft Defender for
+  # Cloud / Qualys container image scanning) to release images before
+  # they become pullable -- that integration isn't configured here, so
+  # every push would be quarantined forever, blocking cosign signing and
+  # AKS pulls alike. Vulnerability gating is already enforced by the
+  # Trivy step in ci-cd.yaml, so ACR's own quarantine is redundant.
+  quarantine_policy_enabled = false
+  tags                      = local.common_tags
 
   dynamic "georeplications" {
     for_each = toset(var.acr_replica_locations)
