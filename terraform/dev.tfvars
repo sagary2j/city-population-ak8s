@@ -40,5 +40,5 @@ acr_replica_locations = ["northeurope"]
 create_github_oidc_identity = true
 github_repository           = "sagary2j/city-population-ak8s"
 github_oidc_environments    = ["dev", "prod"]
-github_default_branch       = "main"
-enable_key_vault = true
+github_default_branch       = "main"     
+enable_key_vault            = true
