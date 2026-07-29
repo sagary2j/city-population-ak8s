@@ -4,6 +4,21 @@
 
 nameOverride: ""
 fullnameOverride: ""
+
+# Dedicated namespace for every resource this chart renders (Deployment,
+# StatefulSet, Services, Secret, NetworkPolicy, etc.) -- keeps the app and
+# its Elasticsearch data layer isolated from `default` and from other
+# workloads in the cluster, and matches the NetworkPolicy in
+# templates/networkpolicy.yaml which only allows pod-to-pod traffic within
+# this namespace. Set to "" to fall back to whatever namespace `helm
+# install -n <ns>` / the current kube context provides instead.
+#
+# Note: ArgoCD's Application (argocd/application.yaml) pins its own
+# `destination.namespace: city-population` independently of this value, so
+# GitOps-driven deploys are unaffected either way -- this mainly matters for
+# manual `helm install`/`helm upgrade` (see Makefile / README.md).
+namespaceOverride: "city-population"
+createNamespace: true
 # ---------------------------------------------------------------------------
 # Application (FastAPI) layer
 # ---------------------------------------------------------------------------
@@ -38,15 +53,24 @@ app:
       cpu: 500m
       memory: 256Mi
   probes:
+    # Gates when liveness/readiness begin: Kubernetes won't run those probes
+    # until this one succeeds, so a slow Elasticsearch (up to
+    # ES_STARTUP_MAX_RETRIES * ES_STARTUP_RETRY_DELAY_SECONDS, default 60s)
+    # never causes a premature liveness-triggered restart.
+    startup:
+      path: /health/startup
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 30 # 5s * 30 = 150s budget, comfortably above the app's own ~60s ES retry budget
     liveness:
-      path: /health
-      initialDelaySeconds: 10
+      path: /health/live
+      initialDelaySeconds: 0
       periodSeconds: 15
       timeoutSeconds: 3
       failureThreshold: 3
     readiness:
       path: /health/ready
-      initialDelaySeconds: 5
+      initialDelaySeconds: 0
       periodSeconds: 10
       timeoutSeconds: 3
       failureThreshold: 3

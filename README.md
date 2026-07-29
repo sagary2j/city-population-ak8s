@@ -91,9 +91,13 @@ Two independent pipelines, plus a GitOps sync loop, cover the whole path:
    in Git. Nothing gets applied to AKS until a commit actually changes the
    chart or its values.
 
-The one manual step today: bumping `helm/values.yaml`'s `image.tag` after a
-new image lands in ACR isn't automated yet (no ArgoCD Image Updater or
-tag-bump job wired up), so that commit is currently made by hand.
+The loop is fully closed: `ci-cd.yaml`'s `update-manifests` job bumps
+`helm/values.yaml`'s `image.repository`/`image.tag` to the image it just
+built and pushed, and commits that change back to `main` as
+`github-actions[bot]` (with `[skip ci]` so the bump itself doesn't
+retrigger the pipeline). ArgoCD picks up that commit on its next
+poll/webhook and reconciles the cluster — commit app code → running on AKS
+requires no manual steps.
 
 ---
 
@@ -176,12 +180,18 @@ minikube image load city-population-api:1.0.0
 
 ### 4. Deploy with Helm
 
+The chart deploys into its own dedicated `city-population` namespace by
+default (see `namespaceOverride`/`createNamespace` in `helm/values.yaml`),
+so pass `--create-namespace` on first install and `-n city-population` on
+every subsequent Helm/kubectl command.
+
 **Docker Desktop / restricted-local-cluster notes**
 If your local cluster enforces strict non-root policies, Elasticsearch init
 containers that require `runAsUser: 0` can be blocked. In that case, install
 with those init containers disabled:
 ```bash
 helm upgrade --install city-population ./helm \
+  --namespace city-population --create-namespace \
   --set app.image.repository=city-population-api \
   --set app.image.tag=1.0.0 \
   --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
@@ -191,9 +201,10 @@ helm upgrade --install city-population ./helm \
 If a previous release is stuck in crash loop with old settings, reset and
 reinstall:
 ```bash
-helm uninstall city-population || true
-kubectl delete pvc es-data-city-population-elasticsearch-0 --ignore-not-found=true
+helm uninstall city-population --namespace city-population || true
+kubectl delete pvc es-data-city-population-elasticsearch-0 -n city-population --ignore-not-found=true
 helm install city-population ./helm \
+  --namespace city-population --create-namespace \
   --set app.image.repository=city-population-api \
   --set app.image.tag=1.0.0 \
   --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
@@ -213,15 +224,15 @@ kubectl get nodes
 Check that everything came up:
 
 ```bash
-kubectl get pods
-kubectl get pvc
-kubectl get statefulset
+kubectl get pods -n city-population
+kubectl get pvc -n city-population
+kubectl get statefulset -n city-population
 ```
 
 ### 5. Access the API
 
 ```bash
-kubectl port-forward svc/city-population-api 8000:80
+kubectl port-forward svc/city-population-api 8000:80 -n city-population
 ```
 
 Then run the same `curl` commands from step 1 against `http://localhost:8000`.
@@ -229,8 +240,8 @@ Then run the same `curl` commands from step 1 against `http://localhost:8000`.
 ### 6. Upgrade / uninstall
 
 ```bash
-helm upgrade city-population ./helm
-helm uninstall city-population
+helm upgrade city-population ./helm --namespace city-population
+helm uninstall city-population --namespace city-population
 ```
 
 Note: the Elasticsearch PVC is not deleted automatically by `helm
@@ -238,7 +249,7 @@ uninstall` (by design, to prevent accidental data loss). Remove it
 explicitly if you want a clean slate:
 
 ```bash
-kubectl delete pvc -l app.kubernetes.io/component=database
+kubectl delete pvc -n city-population -l app.kubernetes.io/component=database
 ```
 
 ---
@@ -361,16 +372,15 @@ $(terraform output -raw get_credentials_command)
 7. **Push & sign** — only after every prior gate passes, the image is
    pushed to ACR and keylessly signed with `cosign` (using the same GitHub
    OIDC identity — no signing key to manage/rotate).
-8. **GitOps update** *(scaffolded, currently disabled)* — the pipeline does
-   **not** run `kubectl apply` or `helm upgrade` itself. The `update-manifests`
-   job (commented out in `ci-cd.yaml` pending manual enablement) is meant to
-   bump `app.image.tag` (and `app.image.repository`) in `helm/values.yaml`
-   and commit that change back to `main`; ArgoCD (Part G) would then detect
-   the commit and reconcile the cluster — the classic GitOps split between
-   CI (build/test/scan) and CD (sync), which also means the CI identity
-   never needs cluster-admin. Until that job is uncommented, bump
-   `helm/values.yaml`'s image tag manually (or via `helm upgrade --set
-   app.image.tag=<tag>`) after a successful build.
+8. **GitOps update** — the pipeline still does **not** run `kubectl apply`
+   or `helm upgrade` itself. Instead, the `update-manifests` job bumps
+   `app.image.tag` (and `app.image.repository`) in `helm/values.yaml` and
+   commits that change back to `main` (as `github-actions[bot]`, with
+   `[skip ci]`); ArgoCD (Part G) detects the commit and reconciles the
+   cluster — the classic GitOps split between CI (build/test/scan) and CD
+   (sync), which also means the CI identity never needs cluster-admin (it
+   only has `contents: write` on the repo, plus `AcrPush` and AKS
+   "Cluster User" on Azure).
 
 `.github/workflows/terraform.yaml` is a separate pipeline for
 infrastructure changes: `terraform plan` runs on every PR (and every push)
@@ -506,15 +516,17 @@ running it for real production traffic.
 **Startup dependency ordering.** Kubernetes does not guarantee that the
 Elasticsearch Pod is ready before the API Pod starts, and Compose's
 `depends_on` only tracks container start, not application readiness. The
-API resolves this in two ways: (1) an async retry loop with backoff in the
-`lifespan` handler that polls Elasticsearch via `ping()`/`cluster.health()`
-before the app accepts traffic, and (2) a `readinessProbe` pointed at
-`/health/ready` (which itself checks the ES connection) so Kubernetes
-never routes traffic to a Pod whose database dependency isn't up yet. The
-plain `/health` liveness endpoint deliberately does *not* depend on
-Elasticsearch, so a transient ES blip doesn't trigger a needless Pod
-restart via `livenessProbe` — only readiness is affected, which is the
-correct signal to remove the Pod from the Service's endpoints.
+API resolves this with the three-probe pattern Kubernetes recommends:
+`startupProbe` → `/health/startup` only reports success once the full
+init sequence (waiting for Elasticsearch, then ensuring the index exists)
+has completed, so `livenessProbe`/`readinessProbe` don't even start
+evaluating until then; `livenessProbe` → `/health/live` deliberately does
+*not* depend on Elasticsearch, so a transient ES blip doesn't trigger a
+needless Pod restart; and `readinessProbe` → `/health/ready` pings
+Elasticsearch on every check, so Kubernetes pulls the Pod out of the
+Service's endpoints (without restarting it) whenever the DB dependency
+goes away. `/health` is kept as a deprecated alias for `/health/live` for
+backward compatibility.
 
 **Reliable volume mounts / permissions.** The official Elasticsearch image
 runs as a non-root `elasticsearch` user and expects its data directory to
@@ -637,10 +649,16 @@ corrected automatically, and rolling back is just `git revert`.
 
 ## API quick reference
 
-- `GET /health` → liveness check, always returns `{"status": "OK"}` as long
-  as the process is up (doesn't touch Elasticsearch).
+- `GET /health/live` → liveness check, always returns `{"status": "OK"}` as
+  long as the process is up (doesn't touch Elasticsearch). Used by the
+  Kubernetes `livenessProbe`.
 - `GET /health/ready` → readiness check, also verifies the Elasticsearch
-  connection. This is what the Kubernetes readiness probe uses.
+  connection (503 if unreachable). Used by the Kubernetes `readinessProbe`.
+- `GET /health/startup` → startup check, only returns 200 once the full
+  boot sequence (Elasticsearch reachable + index ensured) has completed;
+  returns 503/`STARTING` until then. Used by the Kubernetes `startupProbe`.
+- `GET /health` → deprecated alias for `/health/live`, kept temporarily for
+  backward compatibility.
 - `POST /cities` → upsert, body is `{"city": "...", "population": N}`.
 - `GET /cities/{city_name}` → look up a city, 404 with a structured JSON
   error body if it doesn't exist.

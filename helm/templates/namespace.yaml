@@ -1,0 +1,19 @@
+{{/*
+Creates the dedicated namespace this chart deploys into. Safe to leave
+enabled even under ArgoCD (argocd/application.yaml also sets
+syncOptions: CreateNamespace=true) -- both are idempotent against the same
+namespace name.
+
+Disable via `--set createNamespace=false` if the namespace is already
+managed elsewhere (e.g. by a separate platform/landing-zone pipeline) and
+this chart's release principal shouldn't have cluster-scoped Namespace
+permissions.
+*/}}
+{{- if .Values.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "city-population.namespace" . }}
+  labels:
+    {{- include "city-population.labels" . | nindent 4 }}
+{{- end }}
