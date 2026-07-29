@@ -180,12 +180,18 @@ minikube image load city-population-api:1.0.0
 
 ### 4. Deploy with Helm
 
+The chart deploys into its own dedicated `city-population` namespace by
+default (see `namespaceOverride`/`createNamespace` in `helm/values.yaml`),
+so pass `--create-namespace` on first install and `-n city-population` on
+every subsequent Helm/kubectl command.
+
 **Docker Desktop / restricted-local-cluster notes**
 If your local cluster enforces strict non-root policies, Elasticsearch init
 containers that require `runAsUser: 0` can be blocked. In that case, install
 with those init containers disabled:
 ```bash
 helm upgrade --install city-population ./helm \
+  --namespace city-population --create-namespace \
   --set app.image.repository=city-population-api \
   --set app.image.tag=1.0.0 \
   --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
@@ -195,9 +201,10 @@ helm upgrade --install city-population ./helm \
 If a previous release is stuck in crash loop with old settings, reset and
 reinstall:
 ```bash
-helm uninstall city-population || true
-kubectl delete pvc es-data-city-population-elasticsearch-0 --ignore-not-found=true
+helm uninstall city-population --namespace city-population || true
+kubectl delete pvc es-data-city-population-elasticsearch-0 -n city-population --ignore-not-found=true
 helm install city-population ./helm \
+  --namespace city-population --create-namespace \
   --set app.image.repository=city-population-api \
   --set app.image.tag=1.0.0 \
   --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
@@ -217,15 +224,15 @@ kubectl get nodes
 Check that everything came up:
 
 ```bash
-kubectl get pods
-kubectl get pvc
-kubectl get statefulset
+kubectl get pods -n city-population
+kubectl get pvc -n city-population
+kubectl get statefulset -n city-population
 ```
 
 ### 5. Access the API
 
 ```bash
-kubectl port-forward svc/city-population-api 8000:80
+kubectl port-forward svc/city-population-api 8000:80 -n city-population
 ```
 
 Then run the same `curl` commands from step 1 against `http://localhost:8000`.
@@ -233,8 +240,8 @@ Then run the same `curl` commands from step 1 against `http://localhost:8000`.
 ### 6. Upgrade / uninstall
 
 ```bash
-helm upgrade city-population ./helm
-helm uninstall city-population
+helm upgrade city-population ./helm --namespace city-population
+helm uninstall city-population --namespace city-population
 ```
 
 Note: the Elasticsearch PVC is not deleted automatically by `helm
@@ -242,7 +249,7 @@ uninstall` (by design, to prevent accidental data loss). Remove it
 explicitly if you want a clean slate:
 
 ```bash
-kubectl delete pvc -l app.kubernetes.io/component=database
+kubectl delete pvc -n city-population -l app.kubernetes.io/component=database
 ```
 
 ---

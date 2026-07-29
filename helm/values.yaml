@@ -4,6 +4,21 @@
 
 nameOverride: ""
 fullnameOverride: ""
+
+# Dedicated namespace for every resource this chart renders (Deployment,
+# StatefulSet, Services, Secret, NetworkPolicy, etc.) -- keeps the app and
+# its Elasticsearch data layer isolated from `default` and from other
+# workloads in the cluster, and matches the NetworkPolicy in
+# templates/networkpolicy.yaml which only allows pod-to-pod traffic within
+# this namespace. Set to "" to fall back to whatever namespace `helm
+# install -n <ns>` / the current kube context provides instead.
+#
+# Note: ArgoCD's Application (argocd/application.yaml) pins its own
+# `destination.namespace: city-population` independently of this value, so
+# GitOps-driven deploys are unaffected either way -- this mainly matters for
+# manual `helm install`/`helm upgrade` (see Makefile / README.md).
+namespaceOverride: "city-population"
+createNamespace: true
 # ---------------------------------------------------------------------------
 # Application (FastAPI) layer
 # ---------------------------------------------------------------------------

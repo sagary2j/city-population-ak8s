@@ -57,6 +57,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+Target namespace for every resource in this chart. Falls back to
+.Release.Namespace (i.e. whatever `-n`/current context provides) when
+namespaceOverride is left blank.
+*/}}
+{{- define "city-population.namespace" -}}
+{{- default .Release.Namespace .Values.namespaceOverride -}}
+{{- end -}}
+
+{{/*
 Elasticsearch host URL consumed by the application.
 */}}
 {{- define "city-population.esHost" -}}

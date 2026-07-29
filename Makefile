@@ -12,6 +12,7 @@ IMAGE_NAME ?= city-population-api
 IMAGE_TAG ?= 1.0.0
 HELM_RELEASE ?= city-population
 HELM_CHART ?= ./helm
+NAMESPACE ?= city-population
 
 .PHONY: help install test lint run compose-up compose-down smoke-upsert smoke-query smoke-test docker-build helm-install helm-upgrade helm-uninstall clean
 
@@ -52,18 +53,20 @@ smoke-test: ## Run end-to-end API smoke test script
 docker-build: ## Build application container image
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-helm-install: ## Install Helm release
+helm-install: ## Install Helm release (into its own dedicated namespace)
 	helm install $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(NAMESPACE) --create-namespace \
 		--set app.image.repository=$(IMAGE_NAME) \
 		--set app.image.tag=$(IMAGE_TAG)
 
 helm-upgrade: ## Upgrade Helm release
 	helm upgrade $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(NAMESPACE) \
 		--set app.image.repository=$(IMAGE_NAME) \
 		--set app.image.tag=$(IMAGE_TAG)
 
 helm-uninstall: ## Uninstall Helm release
-	helm uninstall $(HELM_RELEASE)
+	helm uninstall $(HELM_RELEASE) --namespace $(NAMESPACE)
 
 clean: ## Remove local virtualenv and pytest cache
 	rm -rf $(VENV) $(APP_DIR)/.pytest_cache

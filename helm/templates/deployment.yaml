@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "city-population.fullname" . }}-api
+  namespace: {{ include "city-population.namespace" . }}
   labels:
     {{- include "city-population.labels" . | nindent 4 }}
     {{- include "city-population.app.selectorLabels" . | nindent 4 }}
@@ -113,6 +114,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ include "city-population.fullname" . }}-api-pdb
+  namespace: {{ include "city-population.namespace" . }}
   labels:
     {{- include "city-population.labels" . | nindent 4 }}
 spec:
@@ -127,6 +129,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ include "city-population.fullname" . }}-api-hpa
+  namespace: {{ include "city-population.namespace" . }}
   labels:
     {{- include "city-population.labels" . | nindent 4 }}
 spec:

@@ -1,10 +1,10 @@
 City Population API has been deployed.
 
 Check rollout status:
-  kubectl rollout status deployment/{{ include "city-population.fullname" . }}-api -n {{ .Release.Namespace }}
+  kubectl rollout status deployment/{{ include "city-population.fullname" . }}-api -n {{ include "city-population.namespace" . }}
 
 Forward a local port to the API:
-  kubectl port-forward svc/{{ include "city-population.fullname" . }}-api 8000:{{ .Values.app.service.port }} -n {{ .Release.Namespace }}
+  kubectl port-forward svc/{{ include "city-population.fullname" . }}-api 8000:{{ .Values.app.service.port }} -n {{ include "city-population.namespace" . }}
 
 Then test it:
   curl http://localhost:8000/health
