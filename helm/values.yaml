@@ -4,7 +4,6 @@
 
 nameOverride: ""
 fullnameOverride: ""
-
 # Dedicated namespace for every resource this chart renders (Deployment,
 # StatefulSet, Services, Secret, NetworkPolicy, etc.) -- keeps the app and
 # its Elasticsearch data layer isolated from `default` and from other
@@ -26,7 +25,7 @@ app:
   replicaCount: 2
   image:
     repository: citypopdevacrmhupn.azurecr.io/city-population-api
-    tag: "fea71624a922"
+    tag: "1351f8f67922"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
