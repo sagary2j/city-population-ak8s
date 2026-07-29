@@ -275,3 +275,28 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   principal_id                     = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
   skip_service_principal_aad_check = true
 }
+
+# ---------------------------------------------------------------------------
+# Grant the human Terraform operator (terraform_operator_object_id --
+# same principal used for Key Vault admin in key_vault.tf) kubectl/helm/
+# argocd access to the cluster. Local accounts are disabled and
+# azure_rbac_enabled = true above, so Azure AD group membership /
+# aks_admin_group_object_ids alone isn't enough for an individual user --
+# Azure role assignments are the only path to both fetch credentials and
+# actually authorize Kubernetes object access:
+#   - Cluster User Role: lets `az aks get-credentials` / `az aks command
+#     invoke` fetch a kubeconfig for this identity.
+#   - RBAC Cluster Admin: authorizes full Kubernetes object access once
+#     authenticated (Azure RBAC is the sole authorization path here).
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "operator_aks_cluster_user" {
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service Cluster User Role"
+  principal_id         = var.terraform_operator_object_id
+}
+
+resource "azurerm_role_assignment" "operator_aks_rbac_cluster_admin" {
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = var.terraform_operator_object_id
+}
