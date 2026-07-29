@@ -17,6 +17,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from elasticsearch import AsyncElasticsearch
@@ -35,9 +36,16 @@ class JSONFormatter(logging.Formatter):
     """Emit log records as single-line JSON, suitable for FluentBit/Logstash
     ingestion and correlation in an ELK / observability stack."""
 
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
+        # Always UTC, regardless of the container's local timezone -- the
+        # preferred format for Elasticsearch, Kibana, Azure Monitor, and
+        # OpenTelemetry, and avoids ambiguity when correlating logs across
+        # Pods/nodes in different timezones.
+        return datetime.fromtimestamp(record.created, tz=UTC).isoformat()
+
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -204,6 +212,8 @@ async def lifespan(app: FastAPI):
                 await startup_task
             except asyncio.CancelledError:
                 pass
+            except Exception:  # noqa: BLE001
+                logger.exception("Startup task shutdown failed")
         if es_client is not None:
             await es_client.close()
 
@@ -333,13 +343,28 @@ async def liveness() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["operations"])
 async def readiness() -> JSONResponse:
-    """Deep readiness check that also verifies Elasticsearch connectivity."""
+    """Deep readiness check. A bare ping() only proves the HTTP endpoint
+    answers -- not that this app's index is actually usable -- so this
+    checks cluster health scoped to our index instead. That single call
+    implicitly proves connectivity (a network/auth failure raises), proves
+    the index exists (a missing index raises index_not_found_exception),
+    and lets us reject a red status (missing primary shards, where reads/
+    writes would fail or return incomplete data)."""
     try:
         client = get_client()
-        if await client.ping():
-            return JSONResponse({"status": "OK", "elasticsearch": "reachable"})
-        raise RuntimeError("ping returned False")
+        health = await client.cluster.health(index=settings.ES_INDEX, request_timeout=3)
+        cluster_status = health.get("status")
+        if cluster_status == "red":
+            raise RuntimeError(f"cluster health is red for index '{settings.ES_INDEX}'")
+        return JSONResponse(
+            {
+                "status": "OK",
+                "elasticsearch": "reachable",
+                "cluster_status": cluster_status,
+            }
+        )
     except Exception as exc:  # noqa: BLE001
+        logger.warning("Readiness probe failed", exc_info=exc)
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "UNAVAILABLE", "elasticsearch": str(exc)},
@@ -356,7 +381,13 @@ async def startup_probe(request: Request) -> JSONResponse:
     ES_STARTUP_MAX_RETRIES / ES_STARTUP_RETRY_DELAY_SECONDS for the maximum
     time that can take."""
     if getattr(request.app.state, "startup_complete", False):
-        return JSONResponse({"status": "OK"})
+        return JSONResponse(
+            {
+                "status": "OK",
+                "elasticsearch": "reachable",
+                "index": settings.ES_INDEX,
+            }
+        )
     content: dict[str, str] = {"status": "STARTING"}
     startup_error = getattr(request.app.state, "startup_error", None)
     if startup_error:
@@ -376,7 +407,7 @@ async def startup_probe(request: Request) -> JSONResponse:
 async def upsert_city(payload: CityUpsertRequest, request: Request) -> CityResponse:
     client = get_client()
     doc_id = city_doc_id(payload.city)
-    now = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    now = datetime.now(UTC).isoformat()
     body = {
         "city": payload.city,
         "population": payload.population,

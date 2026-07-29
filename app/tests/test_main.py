@@ -54,16 +54,28 @@ def test_health_alias_still_works(client):
 
 
 def test_readiness_ok_when_es_reachable(client):
-    main.es_client.ping = AsyncMock(return_value=True)
+    main.es_client.cluster.health = AsyncMock(return_value={"status": "green"})
     response = client.get("/health/ready")
     assert response.status_code == 200
-    assert response.json()["status"] == "OK"
+    body = response.json()
+    assert body["status"] == "OK"
+    assert body["cluster_status"] == "green"
 
 
 def test_readiness_unavailable_when_es_unreachable(client):
-    main.es_client.ping = AsyncMock(side_effect=ConnectionError("boom"))
+    main.es_client.cluster.health = AsyncMock(side_effect=ConnectionError("boom"))
     response = client.get("/health/ready")
     assert response.status_code == 503
+
+
+def test_readiness_unavailable_when_cluster_red(client):
+    """A red cluster status means primary shards are missing -- reads/writes
+    against our index could fail or return incomplete data, so this must
+    not be reported as ready even though Elasticsearch itself answered."""
+    main.es_client.cluster.health = AsyncMock(return_value={"status": "red"})
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "UNAVAILABLE"
 
 
 def test_startup_unavailable_before_startup_completes(client):
@@ -87,7 +99,11 @@ def test_startup_ok_once_startup_completes(client):
     main.app.state.startup_complete = True
     response = client.get("/health/startup")
     assert response.status_code == 200
-    assert response.json() == {"status": "OK"}
+    assert response.json() == {
+        "status": "OK",
+        "elasticsearch": "reachable",
+        "index": main.settings.ES_INDEX,
+    }
     main.app.state.startup_complete = False
 
 
