@@ -79,7 +79,7 @@ class Settings:
         os.environ.get("ES_STARTUP_RETRY_DELAY_SECONDS", "2")
     )
     ES_REQUEST_TIMEOUT: float = float(os.environ.get("ES_REQUEST_TIMEOUT", "10"))
-    APP_VERSION: str = os.environ.get("APP_VERSION", "1.0.0")
+    APP_VERSION: str = os.environ.get("APP_VERSION", "1.0.1")
 
 
 settings = Settings()
