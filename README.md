@@ -51,6 +51,52 @@ city-population-ak8s/
 
 ---
 
+## How a commit gets deployed to AKS
+
+```mermaid
+sequenceDiagram
+    participant Dev as You (git push)
+    participant GH as GitHub
+    participant CI as ci-cd.yaml
+    participant TF as terraform.yaml
+    participant ACR as Azure Container Registry
+    participant Argo as ArgoCD (on AKS)
+    participant AKS as AKS Cluster
+
+    Dev->>GH: push to feature branch / PR
+    GH->>CI: triggers on app/** changes
+    CI->>CI: lint, pytest, bandit, trivy scan
+    CI->>ACR: docker build + push (tag=git sha), cosign sign
+    Dev->>GH: merge PR to main
+    GH->>TF: triggers on terraform/** changes
+    TF->>TF: terraform plan (PR) / apply (main)
+    Note over Argo,AKS: Argo polls Git every ~3 min (or via webhook)
+    Argo->>GH: detects helm/ chart or values changed
+    Argo->>AKS: helm template + kubectl apply (sync)
+    AKS->>AKS: rolling update of Deployment pods
+```
+
+Two independent pipelines, plus a GitOps sync loop, cover the whole path:
+
+1. **App code** (`app/**`, `Dockerfile`) → `ci-cd.yaml` lints, tests, scans,
+   builds the image, and pushes it to ACR tagged with the commit SHA. This
+   pipeline never touches the cluster.
+2. **Infrastructure** (`terraform/**`) → `terraform.yaml` plans on every PR
+   and applies on merge to `main`, using GitHub OIDC (no stored cloud
+   credentials). This is what creates/updates AKS, ACR, networking, Key
+   Vault, etc.
+3. **Deploying the new image** is GitOps, not pipeline-driven: ArgoCD
+   (already running in-cluster) watches `helm/` on the branch set in
+   `argocd/application.yaml` and reconciles the cluster to match whatever's
+   in Git. Nothing gets applied to AKS until a commit actually changes the
+   chart or its values.
+
+The one manual step today: bumping `helm/values.yaml`'s `image.tag` after a
+new image lands in ACR isn't automated yet (no ArgoCD Image Updater or
+tag-bump job wired up), so that commit is currently made by hand.
+
+---
+
 ## Deployment Guide
 
 ### Prerequisites
