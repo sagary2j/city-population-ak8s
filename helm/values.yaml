@@ -38,15 +38,24 @@ app:
       cpu: 500m
       memory: 256Mi
   probes:
+    # Gates when liveness/readiness begin: Kubernetes won't run those probes
+    # until this one succeeds, so a slow Elasticsearch (up to
+    # ES_STARTUP_MAX_RETRIES * ES_STARTUP_RETRY_DELAY_SECONDS, default 60s)
+    # never causes a premature liveness-triggered restart.
+    startup:
+      path: /health/startup
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 30 # 5s * 30 = 150s budget, comfortably above the app's own ~60s ES retry budget
     liveness:
-      path: /health
-      initialDelaySeconds: 10
+      path: /health/live
+      initialDelaySeconds: 0
       periodSeconds: 15
       timeoutSeconds: 3
       failureThreshold: 3
     readiness:
       path: /health/ready
-      initialDelaySeconds: 5
+      initialDelaySeconds: 0
       periodSeconds: 10
       timeoutSeconds: 3
       failureThreshold: 3

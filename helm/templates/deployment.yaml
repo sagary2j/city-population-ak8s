@@ -74,6 +74,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "city-population.fullname" . }}-es-credentials
                   key: password
+          startupProbe:
+            httpGet:
+              path: {{ .Values.app.probes.startup.path }}
+              port: http
+            periodSeconds: {{ .Values.app.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.app.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.app.probes.startup.failureThreshold }}
           livenessProbe:
             httpGet:
               path: {{ .Values.app.probes.liveness.path }}

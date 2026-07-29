@@ -33,17 +33,24 @@ def client():
 # --------------------------------------------------------------------------
 
 
-def test_health_returns_ok(client):
-    response = client.get("/health")
+def test_liveness_returns_ok(client):
+    response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "OK"}
 
 
-def test_health_does_not_touch_elasticsearch(client):
+def test_liveness_does_not_touch_elasticsearch(client):
     """Liveness must never call out to the DB -- see README Part D on
     separating liveness from readiness."""
-    client.get("/health")
+    client.get("/health/live")
     main.es_client.ping.assert_not_called()
+
+
+def test_health_alias_still_works(client):
+    """/health is kept as a backward-compatible alias for /health/live."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "OK"}
 
 
 def test_readiness_ok_when_es_reachable(client):
@@ -57,6 +64,31 @@ def test_readiness_unavailable_when_es_unreachable(client):
     main.es_client.ping = AsyncMock(side_effect=ConnectionError("boom"))
     response = client.get("/health/ready")
     assert response.status_code == 503
+
+
+def test_startup_unavailable_before_startup_completes(client):
+    main.app.state.startup_complete = False
+    main.app.state.startup_error = None
+    response = client.get("/health/startup")
+    assert response.status_code == 503
+    assert response.json()["status"] == "STARTING"
+
+
+def test_startup_reports_error_detail_when_set(client):
+    main.app.state.startup_complete = False
+    main.app.state.startup_error = "Elasticsearch was not reachable after 30 attempts."
+    response = client.get("/health/startup")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Elasticsearch was not reachable after 30 attempts."
+    main.app.state.startup_error = None
+
+
+def test_startup_ok_once_startup_completes(client):
+    main.app.state.startup_complete = True
+    response = client.get("/health/startup")
+    assert response.status_code == 200
+    assert response.json() == {"status": "OK"}
+    main.app.state.startup_complete = False
 
 
 # --------------------------------------------------------------------------

@@ -163,23 +163,49 @@ async def ensure_index(client: AsyncElasticsearch) -> None:
         logger.info(f"Index '{settings.ES_INDEX}' already exists")
 
 
+async def run_startup_sequence(app: FastAPI, client: AsyncElasticsearch) -> None:
+    """Runs the full initialization sequence (wait for Elasticsearch, then
+    ensure the index exists) in the background so the ASGI server can start
+    accepting HTTP connections immediately, rather than blocking for up to
+    ES_STARTUP_MAX_RETRIES * ES_STARTUP_RETRY_DELAY_SECONDS before opening
+    the port. This is what lets /health/startup report real state (rather
+    than the port simply not being open yet), and lets Kubernetes's own
+    startupProbe -- not an internal crash/raise -- own the decision to keep
+    waiting vs. eventually restart the Pod."""
+    try:
+        await wait_for_elasticsearch(client)
+        await ensure_index(client)
+        app.state.es_ready = True
+        app.state.startup_complete = True
+        logger.info("Startup sequence complete")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Fatal error during startup")
+        app.state.es_ready = False
+        app.state.startup_error = str(exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global es_client
     logger.info("Starting up City Population API")
     es_client = build_es_client()
+    app.state.es_ready = False
+    app.state.startup_complete = False
+    app.state.startup_error = None
+
+    startup_task = asyncio.create_task(run_startup_sequence(app, es_client))
     try:
-        await wait_for_elasticsearch(es_client)
-        await ensure_index(es_client)
-        app.state.es_ready = True
-    except Exception:
-        logger.exception("Fatal error during startup")
-        app.state.es_ready = False
-        raise
-    yield
-    logger.info("Shutting down City Population API")
-    if es_client is not None:
-        await es_client.close()
+        yield
+    finally:
+        logger.info("Shutting down City Population API")
+        if not startup_task.done():
+            startup_task.cancel()
+            try:
+                await startup_task
+            except asyncio.CancelledError:
+                pass
+        if es_client is not None:
+            await es_client.close()
 
 
 # --------------------------------------------------------------------------
@@ -192,6 +218,12 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
+# Sane defaults so /health/startup (and friends) behave correctly even if
+# the lifespan hasn't run yet -- e.g. under TestClient(app) without the
+# context-manager form, which intentionally skips lifespan in tests.
+app.state.es_ready = False
+app.state.startup_complete = False
+app.state.startup_error = None
 
 
 @app.middleware("http")
@@ -285,12 +317,17 @@ def get_client() -> AsyncElasticsearch:
 # --------------------------------------------------------------------------
 
 
-@app.get("/health", tags=["operations"])
-async def health() -> dict[str, str]:
-    """Liveness/readiness probe target. Intentionally does NOT depend on
-    Elasticsearch being reachable so that a transient DB blip does not cause
-    Kubernetes to kill and restart an otherwise-healthy API Pod. Use
-    /health/ready if you need a DB-aware readiness check."""
+@app.get("/health", tags=["operations"], deprecated=True)
+@app.get("/health/live", tags=["operations"])
+async def liveness() -> dict[str, str]:
+    """Liveness probe target: reports the process is alive and able to
+    serve HTTP. Intentionally does NOT depend on Elasticsearch being
+    reachable so that a transient DB blip does not cause Kubernetes to kill
+    and restart an otherwise-healthy API Pod. Use /health/ready for a
+    DB-aware readiness check, and /health/startup for initial-boot state.
+
+    /health is kept temporarily as a backward-compatible alias for
+    /health/live -- point new deployments at /health/live directly."""
     return {"status": "OK"}
 
 
@@ -307,6 +344,27 @@ async def readiness() -> JSONResponse:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "UNAVAILABLE", "elasticsearch": str(exc)},
         )
+
+
+@app.get("/health/startup", tags=["operations"])
+async def startup_probe(request: Request) -> JSONResponse:
+    """Startup probe target. Only reports success (200) once the full
+    initialization sequence -- waiting for Elasticsearch to become
+    reachable, then ensuring the index exists -- has completed. Point
+    Kubernetes's startupProbe here so liveness/readiness checks don't begin
+    (and potentially restart the Pod) until this succeeds; see
+    ES_STARTUP_MAX_RETRIES / ES_STARTUP_RETRY_DELAY_SECONDS for the maximum
+    time that can take."""
+    if getattr(request.app.state, "startup_complete", False):
+        return JSONResponse({"status": "OK"})
+    content: dict[str, str] = {"status": "STARTING"}
+    startup_error = getattr(request.app.state, "startup_error", None)
+    if startup_error:
+        content["detail"] = startup_error
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=content,
+    )
 
 
 @app.post(
