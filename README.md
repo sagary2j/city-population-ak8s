@@ -1,48 +1,52 @@
 # City Population API
 
-A containerized FastAPI service that stores city population data in
-Elasticsearch, packaged for Kubernetes via a modular Helm v3 chart, with
-Docker Compose support for local end-to-end testing.
+A small FastAPI service for storing and looking up city population data,
+backed by Elasticsearch. It's packaged as a Helm chart for Kubernetes, with
+Docker Compose for local dev, and comes with the Terraform + GitHub Actions
++ ArgoCD setup we use to run it on AKS.
+
+## Repo layout
 
 ```
-sre-city-population/
-├── app/
-│   ├── main.py                    # FastAPI application
-│   ├── requirements.txt           # Pinned runtime dependencies
-│   ├── requirements-dev.txt       # + pytest, ruff, bandit
-│   └── tests/test_main.py         # Unit tests (mocked Elasticsearch client)
-├── Dockerfile                      # Multi-stage, non-root, minimal image
-├── .dockerignore
-├── docker-compose.yml              # Local API + Elasticsearch stack
-├── helm/
+city-population-ak8s/
+├── app/                          # The FastAPI service itself
+│   ├── main.py
+│   ├── requirements.txt          # Runtime deps
+│   ├── requirements-dev.txt      # + pytest, ruff, bandit
+│   └── tests/test_main.py        # Unit tests, ES client mocked out
+├── Dockerfile                    # Multi-stage, runs as non-root
+├── docker-compose.yml            # API + Elasticsearch, for local testing
+├── helm/                         # Helm v3 chart
 │   ├── Chart.yaml
 │   ├── values.yaml
 │   └── templates/
+│       ├── deployment.yaml           # App Deployment + PDB + optional HPA
+│       ├── service.yaml
+│       ├── elasticsearch.yaml        # StatefulSet + headless Service + PVC
+│       ├── secret.yaml               # ES credentials (dev only, see notes below)
+│       ├── secretproviderclass.yaml  # Optional Key Vault CSI wiring
+│       ├── networkpolicy.yaml        # Locks down access to Elasticsearch
 │       ├── _helpers.tpl
-│       ├── elasticsearch.yaml          # StatefulSet + headless Service + PVC
-│       ├── deployment.yaml             # App Deployment + PDB + optional HPA
-│       ├── service.yaml                # App Service
-│       ├── secret.yaml                 # ES credentials (dev convenience)
-│       ├── secretproviderclass.yaml    # Optional: Key Vault via CSI driver
-│       ├── networkpolicy.yaml          # Isolates Elasticsearch
 │       └── NOTES.txt
-├── terraform/                      # Part E: AKS + ACR + supporting infra
-│   ├── versions.tf                 # Providers + remote state backend
+├── terraform/                    # AKS + ACR + everything around them
+│   ├── versions.tf                   # Providers + remote state backend
 │   ├── variables.tf
-│   ├── main.tf                     # RG, networking, Log Analytics, ACR, AKS
-│   ├── key_vault.tf                 # Azure Key Vault + AKS CSI wiring
-│   ├── identity.tf                  # GitHub OIDC App Registration + role assignments
+│   ├── main.tf                       # Resource group, networking, ACR, AKS, Log Analytics
+│   ├── key_vault.tf                  # Key Vault + AKS CSI driver wiring
+│   ├── identity.tf                   # GitHub OIDC app registration + role assignments
 │   ├── outputs.tf
 │   └── dev.tfvars
 ├── .github/workflows/
-│   ├── ci-cd.yaml                  # Part F: lint/test/scan/build/push/GitOps update
-│   └── terraform.yaml              # Plan on PR, apply on merge to main
-├── argocd/                         # Part G: GitOps deployment
-│   ├── project.yaml                # AppProject (scopes what ArgoCD may touch)
-│   └── application.yaml            # Application (syncs helm/ to AKS)
+│   ├── ci-cd.yaml                    # Lint, test, scan, build, push, sign
+│   └── terraform.yaml                # Plan on PR, apply on merge to main
+├── argocd/
+│   ├── project.yaml                  # AppProject - scopes what ArgoCD can touch
+│   └── application.yaml              # Application - syncs helm/ onto AKS
 ├── scripts/
-│   └── bootstrap-tfstate.sh        # One-time remote state storage setup
-└── README.md                       # This file
+│   ├── bootstrap-tfstate.sh          # One-off: creates the remote state storage account
+│   ├── bootstrap-argocd.sh           # Installs ArgoCD and registers the app
+│   └── smoke-test.sh                 # Hits the running API and checks the responses
+└── README.md
 ```
 
 ---
@@ -126,12 +130,38 @@ minikube image load city-population-api:1.0.0
 
 ### 4. Deploy with Helm
 
+**Docker Desktop / restricted-local-cluster notes**
+If your local cluster enforces strict non-root policies, Elasticsearch init
+containers that require `runAsUser: 0` can be blocked. In that case, install
+with those init containers disabled:
 ```bash
+helm upgrade --install city-population ./helm \
+  --set app.image.repository=city-population-api \
+  --set app.image.tag=1.0.0 \
+  --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
+  --set elasticsearch.initContainers.fixDataPermissions.enabled=false
+```
+
+If a previous release is stuck in crash loop with old settings, reset and
+reinstall:
+```bash
+helm uninstall city-population || true
+kubectl delete pvc es-data-city-population-elasticsearch-0 --ignore-not-found=true
 helm install city-population ./helm \
   --set app.image.repository=city-population-api \
-  --set app.image.tag=1.0.0
+  --set app.image.tag=1.0.0 \
+  --set elasticsearch.initContainers.fixVmMaxMapCount.enabled=false \
+  --set elasticsearch.initContainers.fixDataPermissions.enabled=false
+```
 
-kubectl rollout status deployment/city-population-api
+When using Docker Desktop behind a corporate proxy, ensure the local API host
+is excluded so `kubectl` can talk to the cluster directly:
+
+```bash
+export NO_PROXY="$NO_PROXY,kubernetes.docker.internal"
+export no_proxy="$no_proxy,kubernetes.docker.internal"
+kubectl config use-context docker-desktop
+kubectl get nodes
 ```
 
 Check that everything came up:
@@ -255,11 +285,9 @@ Get cluster credentials locally:
 $(terraform output -raw get_credentials_command)
 ```
 
-> **Note on validation:** this chart/config was authored and syntax-reviewed
-> carefully, but `terraform validate`/`helm lint` could not be executed in
-> the environment that produced this repo (no outbound access to
-> releases.hashicorp.com). Run both locally before your first `apply`:
-> `terraform fmt -recursive && terraform validate` and `helm lint ./helm`.
+> Before your first `apply`, it's worth running
+> `terraform fmt -recursive && terraform validate` and `helm lint ./helm`
+> locally just to catch any environment-specific issues early.
 
 ---
 
@@ -422,9 +450,12 @@ an ArgoCD `ApplicationSet` templated over a list of environments.
 
 ---
 
-## SRE Reflection & Production Roadmap
+## Design Notes & Production Roadmap
 
-### Encountered Challenges
+A few notes on trickier bits of this build, and what we'd want to change before
+running it for real production traffic.
+
+### Things that weren't obvious at first
 
 **Startup dependency ordering.** Kubernetes does not guarantee that the
 Elasticsearch Pod is ready before the API Pod starts, and Compose's
@@ -465,29 +496,27 @@ single document — matching the intended upsert semantics.
 temp directory. Fixed with a small `emptyDir` mounted at `/tmp`, keeping
 the rest of the filesystem immutable.
 
-**Terraform state and CI/CD identity are their own bootstrap problem.**
-Remote state storage can't itself be created by the Terraform it backs
-(handled with the small idempotent `scripts/bootstrap-tfstate.sh`), and the
-GitHub Actions OIDC identity that Terraform provisions
+**Terraform state and the CI/CD identity are a bit of a chicken-and-egg
+problem.** The remote state storage account can't be created by the same
+Terraform it backs (that's what the small `scripts/bootstrap-tfstate.sh`
+is for), and the GitHub Actions OIDC identity that Terraform creates
 (`terraform/identity.tf`) is also the identity `terraform apply` needs to
-already be running as. In practice this means the very first `apply` for a
-new environment has to run from an operator's local `az login` session (or
-an existing broader identity); after that, subsequent runs can use the
-federated GitHub identity. This chicken-and-egg step is called out
-explicitly here rather than glossed over, since it's a common source of
-"the pipeline can't bootstrap itself" surprises.
+be running as. In practice, the very first `apply` for a new environment
+has to run from someone's local `az login` session (or another existing
+identity with enough permissions); after that, later runs can use the
+federated GitHub identity instead. Worth knowing about up front so it
+doesn't look like the pipeline is broken on the first run.
 
-**Separating CI (build/scan) from CD (sync) cleanly.** It was tempting to
-have the GitHub Actions pipeline run `helm upgrade --install` directly
-against the cluster after a successful build — it's fewer moving parts.
-The tradeoff is that CI then needs write access to the cluster, and there's
-no single source of truth for "what's actually deployed" other than
-whatever the last pipeline run happened to push. Committing the image tag
-bump to Git and letting ArgoCD reconcile from there costs one extra hop
-but means the cluster state is always derivable from a Git commit, drift
-is self-healed automatically, and a rollback is just a `git revert`.
+**Why CI and CD are two separate steps.** It would be simpler to have the
+GitHub Actions pipeline just run `helm upgrade --install` straight after a
+successful build. The problem is that then CI needs write access to the
+cluster, and there's no single place that tells you what's actually
+deployed other than whatever the last pipeline run happened to push. By
+instead committing the image tag bump to Git and letting ArgoCD pick it up,
+the cluster's state is always whatever's in the Git repo, drift gets
+corrected automatically, and rolling back is just `git revert`.
 
-### Production Scaling Architecture
+### If this were going to production
 
 **High Availability**
 - Move Elasticsearch from the single-node dev StatefulSet in this chart to
@@ -560,17 +589,17 @@ is self-healed automatically, and a rollback is just a `git revert`.
 
 ---
 
-## Notes
+## API quick reference
 
-- **Health check** → `GET /health` returns `{"status": "OK"}` exactly as
-  specified; `GET /health/ready` is an additional, DB-aware endpoint used
-  by the Kubernetes readiness probe (not required by the spec, but a
-  standard SRE practice to separate liveness from readiness).
-- **Upsert endpoint** → `POST /cities` with `{"city": "...", "population": N}`.
-- **Query endpoint** → `GET /cities/{city_name}`, 404 with a structured
-  JSON error body when not found.
-- **Database** → Elasticsearch, per the "preferred" option in the spec,
-  using the official async `elasticsearch` Python client.
-- **Kubernetes packaging** → Helm v3 chart, application and database
-  layers separated into distinct templates and `values.yaml` sections as
-  requested.
+- `GET /health` → liveness check, always returns `{"status": "OK"}` as long
+  as the process is up (doesn't touch Elasticsearch).
+- `GET /health/ready` → readiness check, also verifies the Elasticsearch
+  connection. This is what the Kubernetes readiness probe uses.
+- `POST /cities` → upsert, body is `{"city": "...", "population": N}`.
+- `GET /cities/{city_name}` → look up a city, 404 with a structured JSON
+  error body if it doesn't exist.
+- Elasticsearch is the datastore, accessed via the official async
+  `elasticsearch` Python client.
+- Packaged as a Helm v3 chart, with the app and the database split into
+  separate templates and `values.yaml` sections so they can be versioned
+  and scaled independently.
