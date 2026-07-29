@@ -36,9 +36,8 @@ acr_sku = "Premium"
 # westus does not support Availability Zones, which georeplications requires
 # (zone_redundancy_enabled = true); northeurope pairs well with eastus/westeurope.
 acr_replica_locations = ["northeurope"]
-
 create_github_oidc_identity = true
 github_repository           = "sagary2j/city-population-ak8s"
 github_oidc_environments    = ["dev", "prod"]
-github_default_branch       = "main"     
+github_default_branch       = "main"
 enable_key_vault            = true
