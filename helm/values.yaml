@@ -11,7 +11,7 @@ app:
   replicaCount: 2
   image:
     repository: citypopdevacrmhupn.azurecr.io/city-population-api
-    tag: "78f8a00af62e"
+    tag: "9e5e1925790b"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
