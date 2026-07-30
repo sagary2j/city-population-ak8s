@@ -1,12 +1,9 @@
-"""
-Unit tests for the City Population API.
+"""Unit tests for the City Population API.
 
-The Elasticsearch client is mocked at the module level (main.es_client) so
-these tests run fully offline and fast -- no real cluster is started, and
-the app's startup `lifespan` (which performs real network retries against
-Elasticsearch) is intentionally not triggered by using a plain
-`TestClient(main.app)` instantiation rather than the `with TestClient(...)`
-context-manager form.
+The Elasticsearch client is mocked at the module level (main.es_client), so
+these run offline with no real cluster. We use a plain TestClient(main.app)
+rather than the context-manager form, which skips the startup lifespan
+(and its real network retries against Elasticsearch).
 """
 
 import os
@@ -28,9 +25,7 @@ def client():
     return TestClient(main.app)
 
 
-# --------------------------------------------------------------------------
-# Health
-# --------------------------------------------------------------------------
+# health
 
 
 def test_liveness_returns_ok(client):
@@ -40,8 +35,7 @@ def test_liveness_returns_ok(client):
 
 
 def test_liveness_does_not_touch_elasticsearch(client):
-    """Liveness must never call out to the DB -- see README Part D on
-    separating liveness from readiness."""
+    """Liveness must never call out to the DB."""
     client.get("/health/live")
     main.es_client.ping.assert_not_called()
 
@@ -69,9 +63,8 @@ def test_readiness_unavailable_when_es_unreachable(client):
 
 
 def test_readiness_unavailable_when_cluster_red(client):
-    """A red cluster status means primary shards are missing -- reads/writes
-    against our index could fail or return incomplete data, so this must
-    not be reported as ready even though Elasticsearch itself answered."""
+    """Red status means primary shards are missing, so this must not report
+    ready even though Elasticsearch itself answered."""
     main.es_client.cluster.health = AsyncMock(return_value={"status": "red"})
     response = client.get("/health/ready")
     assert response.status_code == 503
@@ -107,9 +100,7 @@ def test_startup_ok_once_startup_completes(client):
     main.app.state.startup_complete = False
 
 
-# --------------------------------------------------------------------------
-# Upsert
-# --------------------------------------------------------------------------
+# upsert
 
 
 def test_upsert_city_success(client):
@@ -145,9 +136,7 @@ def test_upsert_city_upstream_failure_returns_503(client):
     assert response.json()["error"] == "upstream_unavailable"
 
 
-# --------------------------------------------------------------------------
-# Query
-# --------------------------------------------------------------------------
+# query
 
 
 def test_get_city_found(client):
@@ -182,9 +171,7 @@ def test_get_city_upstream_failure_returns_503(client):
     assert response.status_code == 503
 
 
-# --------------------------------------------------------------------------
-# Upsert idempotency (document ID derivation)
-# --------------------------------------------------------------------------
+# upsert idempotency (document id derivation)
 
 
 @pytest.mark.parametrize(

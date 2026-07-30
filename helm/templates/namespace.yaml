@@ -1,7 +1,7 @@
 {{/*
 Creates the dedicated namespace this chart deploys into. Safe to leave
 enabled even under ArgoCD (argocd/application.yaml also sets
-syncOptions: CreateNamespace=true) -- both are idempotent against the same
+syncOptions: CreateNamespace=true) - both are idempotent against the same
 namespace name.
 
 Disable via `--set createNamespace=false` if the namespace is already

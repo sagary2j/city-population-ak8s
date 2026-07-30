@@ -1,15 +1,13 @@
-# Backs the "replace the Helm Secret with Key Vault" recommendation in
-# README.md Part D. The AKS-managed identity created by the
-# key_vault_secrets_provider add-on (main.tf) is granted read access here;
-# application Pods consume secrets via a SecretProviderClass (see
-# helm/templates/secretproviderclass.yaml) using Azure AD Workload Identity
-# rather than any static credential.
+# Optional Key Vault backing for app secrets. The AKS-managed identity from
+# the key_vault_secrets_provider add-on (main.tf) gets read access here;
+# Pods consume secrets via a SecretProviderClass (see
+# helm/templates/secretproviderclass.yaml) using Workload Identity, not a static credential.
 
 #checkov:skip=CKV2_AZURE_32:Private endpoint is implemented as a separate azurerm_private_endpoint resource with the same conditional count; this skip avoids graph-resolution false positives in CI.
-#checkov:skip=CKV_AZURE_110:Purge protection is intentionally environment-gated (enabled only when environment=="prod") so this dev/take-home stack can be torn down immediately via `terraform destroy` without waiting out the soft-delete retention; production deployments get purge protection automatically.
+#checkov:skip=CKV_AZURE_110:Purge protection is intentionally environment-gated (enabled only when environment=="prod") so this dev stack can be torn down immediately via `terraform destroy` without waiting out the soft-delete retention; production deployments get purge protection automatically.
 resource "azurerm_key_vault" "main" {
   #checkov:skip=CKV2_AZURE_32:Private endpoint exists in this module (azurerm_private_endpoint.key_vault), but graph check can false-positive with conditional resources.
-  #checkov:skip=CKV_AZURE_110:See resource-level skip above -- purge protection is environment-gated by design.
+  #checkov:skip=CKV_AZURE_110:See resource-level skip above - purge protection is environment-gated by design.
   count                         = var.enable_key_vault ? 1 : 0
   name                          = "${substr(local.name_prefix, 0, 15)}-kv-${random_string.suffix.result}"
   resource_group_name           = azurerm_resource_group.main.name
@@ -80,13 +78,13 @@ resource "azurerm_role_assignment" "aks_kv_secrets_reader" {
 
 # Terraform's own identity gets Secrets Officer so it (or an operator) can
 # seed the initial ES credentials. In steady state, rotate these via a
-# separate, access-controlled process -- not via `terraform apply` on every run.
+# separate, access-controlled process - not via `terraform apply` on every run.
 #
 # Pinned to explicit, static principals (rather than the dynamic "current
 # caller" via data.azurerm_client_config.current.object_id) so this role
 # assignment doesn't flip-flop (force a replace) every time a different
-# identity -- a human operator locally vs. the CI service principal in
-# GitHub Actions -- runs `terraform apply`.
+# identity - a human operator locally vs. the CI service principal in
+# GitHub Actions - runs `terraform apply`.
 resource "azurerm_role_assignment" "terraform_kv_admin" {
   count = var.enable_key_vault ? 1 : 0
 

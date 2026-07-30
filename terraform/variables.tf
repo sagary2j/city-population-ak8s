@@ -30,9 +30,7 @@ variable "tags" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Networking
-# ---------------------------------------------------------------------------
+# networking
 variable "vnet_address_space" {
   description = "Address space for the AKS virtual network."
   type        = list(string)
@@ -49,7 +47,7 @@ variable "api_server_authorized_ip_ranges" {
   description = <<-EOT
     CIDR ranges allowed to reach the AKS API server (e.g. your CI runner's
     egress IPs and office/VPN ranges). Leave empty to allow all (not
-    recommended for production -- see README Part D / security hardening).
+    recommended for production).
   EOT
   type        = list(string)
   default     = []
@@ -65,7 +63,7 @@ variable "argocd_ui_allowed_cidrs" {
   description = <<-EOT
     CIDR ranges (e.g. ["203.0.113.4/32"]) allowed to reach the ArgoCD UI's
     public LoadBalancer on port 443. Leave empty (default) to keep ArgoCD
-    unreachable from the internet -- the NSG allow rule is only created when
+    unreachable from the internet - the NSG allow rule is only created when
     this list is non-empty. Scripts/bootstrap-argocd.sh's --expose-ui flag
     also sets the matching Kubernetes Service loadBalancerSourceRanges, so
     both layers (NSG + Service) must agree for access to actually work.
@@ -74,9 +72,7 @@ variable "argocd_ui_allowed_cidrs" {
   default     = []
 }
 
-# ---------------------------------------------------------------------------
-# AKS
-# ---------------------------------------------------------------------------
+# aks
 variable "kubernetes_version" {
   description = "Kubernetes version for the AKS control plane and default node pool."
   type        = string
@@ -125,9 +121,7 @@ variable "log_analytics_retention_days" {
   default     = 30
 }
 
-# ---------------------------------------------------------------------------
-# ACR
-# ---------------------------------------------------------------------------
+# acr
 variable "acr_sku" {
   description = "Azure Container Registry SKU (Premium required for security controls used by this stack)."
   type        = string
@@ -139,9 +133,7 @@ variable "acr_sku" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# GitHub OIDC federation (passwordless CI/CD auth to Azure)
-# ---------------------------------------------------------------------------
+# github oidc federation (passwordless CI/CD auth to Azure)
 variable "create_github_oidc_identity" {
   description = "If true, create an Azure AD App Registration + federated credentials trusting GitHub Actions OIDC tokens from the given repository, scoped to push images to ACR and deploy to AKS. Set to false if this identity is managed elsewhere."
   type        = bool
@@ -170,10 +162,6 @@ variable "github_repo_id" {
   default     = "1313745460"
 }
 
-# Remote state storage account, bootstrapped out-of-band by
-# scripts/bootstrap-tfstate.sh (see versions.tf). Referenced here only to
-# grant the CI identity RBAC access to it -- this stack does not manage
-# (create/destroy) these resources.
 variable "tfstate_resource_group_name" {
   description = "Resource group holding the Terraform remote state storage account."
   type        = string
@@ -192,9 +180,7 @@ variable "github_oidc_environments" {
   default     = ["dev", "prod"]
 }
 
-# Static (non-dynamic) principal for the Key Vault admin role assignment in
-# key_vault.tf, so it doesn't flip-flop between whichever identity last ran
-# `terraform apply` (see terraform_kv_admin's comment for details).
+# My Principle object IDs
 variable "terraform_operator_object_id" {
   description = "Azure AD object ID of the human operator retaining Key Vault Secrets Officer access, independent of the CI identity."
   type        = string
@@ -207,9 +193,7 @@ variable "github_default_branch" {
   default     = "main"
 }
 
-# ---------------------------------------------------------------------------
-# Key Vault (production secret backing, referenced from README Part D)
-# ---------------------------------------------------------------------------
+# key vault (referenced from README)
 variable "enable_key_vault" {
   description = "Create an Azure Key Vault for application/Elasticsearch secrets, wired up for the AKS Secrets Store CSI Driver via workload identity."
   type        = bool

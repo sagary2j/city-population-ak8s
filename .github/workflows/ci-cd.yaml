@@ -28,9 +28,7 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-  # =========================================================================
-  # 1. Lint, unit test, SAST, secret scan, Dockerfile lint
-  # =========================================================================
+  # lint, unit test, SAST, secret scan, Dockerfile lint
   test-and-scan:
     name: Lint, Test & SAST
     runs-on: ubuntu-latest
@@ -151,9 +149,7 @@ jobs:
           dockerfile: Dockerfile
           failure-threshold: warning
 
-  # =========================================================================
-  # 2. IaC scanning (Terraform + Helm/Kubernetes manifests)
-  # =========================================================================
+  # IaC scanning (Terraform + Helm/Kubernetes manifests)
   iac-scan:
     name: IaC Security Scan
     runs-on: ubuntu-latest
@@ -216,9 +212,7 @@ jobs:
           sarif_file: tfsec-results.sarif
           category: tfsec
 
-  # =========================================================================
-  # 3. Build image, scan it, push to ACR (only after tests/scans pass)
-  # =========================================================================
+  # build image, scan it, push to ACR (only after tests/scans pass)
   build-and-push:
     name: Build, Scan & Push Image
     runs-on: ubuntu-latest
@@ -227,7 +221,7 @@ jobs:
     # Always use the 'dev' GitHub Environment for this job (never gated on
     # branch name): the CI identity's federated credential
     # (terraform/identity.tf) only trusts the `environment:dev`/`prod`
-    # subjects, `ref:refs/heads/main`, and `pull_request` -- not arbitrary
+    # subjects, `ref:refs/heads/main`, and `pull_request`, not arbitrary
     # feature-branch refs. Using `environment: dev` here (matching
     # terraform.yaml's plan job) means pushes from any branch resolve to an
     # already-trusted OIDC subject.
@@ -337,9 +331,7 @@ jobs:
           echo "cosign sign failed after 5 attempts"
           exit 1
 
-  # =========================================================================
-  # 4. GitOps deploy: bump the image tag Helm consumes; ArgoCD takes it from there
-  # =========================================================================
+  # GitOps deploy: bump the image tag Helm consumes, ArgoCD takes it from there
   update-manifests:
     name: Update GitOps Manifest (ArgoCD sync trigger)
     runs-on: ubuntu-latest
@@ -367,7 +359,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add helm/values.yaml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(gitops): deploy ${{ env.REGISTRY_REPOSITORY }}:${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
+          git commit -m "(gitops): deploy ${{ env.REGISTRY_REPOSITORY }}:${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
           git push
 
       - name: Summary

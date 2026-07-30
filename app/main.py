@@ -1,12 +1,9 @@
-"""
-City Population API
---------------------
-A production-ready FastAPI service that stores city population data in
-Elasticsearch. Implements health checks, upsert, and query endpoints with
-structured JSON logging, async connection handling, and startup retry logic
-so the API can boot cleanly even if Elasticsearch is not yet ready
-(important when running in Kubernetes where Pod start order is not
-guaranteed).
+"""City Population API.
+
+FastAPI service for storing/looking up city population data in
+Elasticsearch. Has health checks, upsert and query endpoints, JSON logging,
+and startup retry logic since Kubernetes doesn't guarantee the ES pod is
+ready before this one starts.
 """
 
 import asyncio
@@ -27,20 +24,11 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
-# --------------------------------------------------------------------------
-# Structured JSON logging
-# --------------------------------------------------------------------------
-
-
 class JSONFormatter(logging.Formatter):
-    """Emit log records as single-line JSON, suitable for FluentBit/Logstash
-    ingestion and correlation in an ELK / observability stack."""
+    """Single-line JSON log records, easy to ship to FluentBit/ELK."""
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
-        # Always UTC, regardless of the container's local timezone -- the
-        # preferred format for Elasticsearch, Kibana, Azure Monitor, and
-        # OpenTelemetry, and avoids ambiguity when correlating logs across
-        # Pods/nodes in different timezones.
+        # always UTC so logs line up across pods/nodes in different timezones
         return datetime.fromtimestamp(record.created, tz=UTC).isoformat()
 
     def format(self, record: logging.LogRecord) -> str:
@@ -63,7 +51,7 @@ def configure_logging() -> logging.Logger:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
-    # Quiet down noisy third-party loggers, keep them structured too.
+    # quiet down the noisy third-party loggers
     logging.getLogger("elastic_transport").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     return logging.getLogger("city-population-api")
@@ -71,9 +59,7 @@ def configure_logging() -> logging.Logger:
 
 logger = configure_logging()
 
-# --------------------------------------------------------------------------
-# Configuration (12-factor: everything from the environment)
-# --------------------------------------------------------------------------
+# config, all from env vars
 
 
 class Settings:
@@ -105,14 +91,9 @@ INDEX_MAPPING = {
     },
     "settings": {
         "number_of_shards": 1,
-        # number_of_replicas is intentionally left to the caller / Helm
-        # values, since it depends on cluster size. See helm/values.yaml.
+        # number_of_replicas depends on cluster size, left to helm/values.yaml
     },
 }
-
-# --------------------------------------------------------------------------
-# Elasticsearch client lifecycle
-# --------------------------------------------------------------------------
 
 es_client: Optional[AsyncElasticsearch] = None
 
@@ -129,13 +110,9 @@ def build_es_client() -> AsyncElasticsearch:
 
 
 async def wait_for_elasticsearch(client: AsyncElasticsearch) -> None:
-    """Retry with backoff until Elasticsearch is reachable and healthy.
-
-    This guards against the classic "app starts before its database"
-    ordering problem when both are deployed together in Kubernetes: the
-    Elasticsearch Pod may take tens of seconds to form a cluster and report
-    healthy, while the API Pod's process starts almost instantly.
-    """
+    """Poll until Elasticsearch answers. ES can take a while to form its
+    cluster and go green, while this process starts almost instantly, so
+    we retry instead of assuming it's ready."""
     attempt = 0
     while attempt < settings.ES_STARTUP_MAX_RETRIES:
         attempt += 1
@@ -172,14 +149,10 @@ async def ensure_index(client: AsyncElasticsearch) -> None:
 
 
 async def run_startup_sequence(app: FastAPI, client: AsyncElasticsearch) -> None:
-    """Runs the full initialization sequence (wait for Elasticsearch, then
-    ensure the index exists) in the background so the ASGI server can start
-    accepting HTTP connections immediately, rather than blocking for up to
-    ES_STARTUP_MAX_RETRIES * ES_STARTUP_RETRY_DELAY_SECONDS before opening
-    the port. This is what lets /health/startup report real state (rather
-    than the port simply not being open yet), and lets Kubernetes's own
-    startupProbe -- not an internal crash/raise -- own the decision to keep
-    waiting vs. eventually restart the Pod."""
+    """Waits for Elasticsearch, then makes sure the index exists. Runs as a
+    background task so uvicorn can open the port right away instead of
+    blocking startup - /health/startup reflects the real state, and it's
+    the startupProbe (not a crash) that decides whether to keep waiting."""
     try:
         await wait_for_elasticsearch(client)
         await ensure_index(client)
@@ -218,19 +191,14 @@ async def lifespan(app: FastAPI):
             await es_client.close()
 
 
-# --------------------------------------------------------------------------
-# FastAPI app
-# --------------------------------------------------------------------------
-
 app = FastAPI(
     title="City Population API",
     description="Upsert and query city population data backed by Elasticsearch.",
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
-# Sane defaults so /health/startup (and friends) behave correctly even if
-# the lifespan hasn't run yet -- e.g. under TestClient(app) without the
-# context-manager form, which intentionally skips lifespan in tests.
+# defaults so the health endpoints behave even before lifespan runs
+# (e.g. plain TestClient(app) in tests skips it)
 app.state.es_ready = False
 app.state.startup_complete = False
 app.state.startup_error = None
@@ -274,11 +242,6 @@ async def add_request_id_and_logging(request: Request, call_next):
     return response
 
 
-# --------------------------------------------------------------------------
-# Schemas
-# --------------------------------------------------------------------------
-
-
 class CityUpsertRequest(BaseModel):
     city: str = Field(..., min_length=1, max_length=200, description="City name")
     population: int = Field(..., ge=0, description="Population count, must be >= 0")
@@ -304,15 +267,9 @@ class ErrorResponse(BaseModel):
     request_id: Optional[str] = None
 
 
-# --------------------------------------------------------------------------
-# Helpers
-# --------------------------------------------------------------------------
-
-
 def city_doc_id(city_name: str) -> str:
-    """Deterministic document id so repeated upserts of the same city
-    (case-insensitive) update a single document rather than creating
-    duplicates."""
+    """Normalize to a stable doc id so upserts of the same city (regardless
+    of case/whitespace) update one document instead of creating dupes."""
     return city_name.strip().lower()
 
 
@@ -322,34 +279,22 @@ def get_client() -> AsyncElasticsearch:
     return es_client
 
 
-# --------------------------------------------------------------------------
-# Routes
-# --------------------------------------------------------------------------
-
-
 @app.get("/health", tags=["operations"], deprecated=True)
 @app.get("/health/live", tags=["operations"])
 async def liveness() -> dict[str, str]:
-    """Liveness probe target: reports the process is alive and able to
-    serve HTTP. Intentionally does NOT depend on Elasticsearch being
-    reachable so that a transient DB blip does not cause Kubernetes to kill
-    and restart an otherwise-healthy API Pod. Use /health/ready for a
-    DB-aware readiness check, and /health/startup for initial-boot state.
+    """Liveness probe. Deliberately doesn't touch Elasticsearch - a DB blip
+    shouldn't get a healthy pod killed. Use /health/ready for that.
 
-    /health is kept temporarily as a backward-compatible alias for
-    /health/live -- point new deployments at /health/live directly."""
+    /health is the old path, kept as an alias for /health/live."""
     return {"status": "OK"}
 
 
 @app.get("/health/ready", tags=["operations"])
 async def readiness() -> JSONResponse:
-    """Deep readiness check. A bare ping() only proves the HTTP endpoint
-    answers -- not that this app's index is actually usable -- so this
-    checks cluster health scoped to our index instead. That single call
-    implicitly proves connectivity (a network/auth failure raises), proves
-    the index exists (a missing index raises index_not_found_exception),
-    and lets us reject a red status (missing primary shards, where reads/
-    writes would fail or return incomplete data)."""
+    """Readiness check. A plain ping() only proves ES answers, not that our
+    index is usable, so we check cluster health scoped to our index -
+    that catches connectivity issues, a missing index, and a red status
+    (missing primary shards) in one call."""
     try:
         client = get_client()
         health = await client.cluster.health(index=settings.ES_INDEX, request_timeout=3)
@@ -373,13 +318,10 @@ async def readiness() -> JSONResponse:
 
 @app.get("/health/startup", tags=["operations"])
 async def startup_probe(request: Request) -> JSONResponse:
-    """Startup probe target. Only reports success (200) once the full
-    initialization sequence -- waiting for Elasticsearch to become
-    reachable, then ensuring the index exists -- has completed. Point
-    Kubernetes's startupProbe here so liveness/readiness checks don't begin
-    (and potentially restart the Pod) until this succeeds; see
-    ES_STARTUP_MAX_RETRIES / ES_STARTUP_RETRY_DELAY_SECONDS for the maximum
-    time that can take."""
+    """Startup probe. Only returns 200 once ES is reachable and the index
+    exists. Point the Kubernetes startupProbe here so liveness/readiness
+    don't kick in until then (max wait is ES_STARTUP_MAX_RETRIES *
+    ES_STARTUP_RETRY_DELAY_SECONDS)."""
     if getattr(request.app.state, "startup_complete", False):
         return JSONResponse(
             {
@@ -481,6 +423,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 if __name__ == "__main__":
     import uvicorn
 
-    # Binding 0.0.0.0 is intentional: this only runs inside a container,
-    # where the Service/Ingress must be able to reach the process.
+    # 0.0.0.0 is fine here, this only ever runs inside a container
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)  # nosec B104

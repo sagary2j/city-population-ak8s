@@ -1,25 +1,12 @@
 #!/usr/bin/env bash
-# Idempotently installs ArgoCD on the (possibly fully private) AKS cluster
-# provisioned by terraform/, registers this repo's argocd/project.yaml +
-# argocd/application.yaml, and optionally exposes the ArgoCD UI via a public
-# LoadBalancer restricted to specific source IPs.
-#
-# Why `az aks command invoke` everywhere: when terraform/dev.tfvars has
-# enable_private_cluster=true and api_server_authorized_ip_ranges=[], the AKS
-# API server has NO public/direct access path at all -- not even from a
-# correctly-configured local kubectl. `az aks command invoke` runs kubectl
-# inside the cluster via the ARM control plane and streams back stdout,
-# which works regardless of network reachability, as long as the cluster is
-# Running and the caller has Microsoft.ContainerService/managedClusters/
-# runCommand/action (covered by Contributor on the resource group).
-#
+
 # Usage:
 #   ./scripts/bootstrap-argocd.sh <resource-group> <cluster-name> [options]
 #
 # Options:
 #   --expose-ui <cidr>   Patch argocd-server to type=LoadBalancer with
 #                         loadBalancerSourceRanges=[<cidr>] (e.g. 203.0.113.4/32).
-#                         Requires a matching NSG rule -- set
+#                         Requires a matching NSG rule - set
 #                         argocd_ui_allowed_cidrs in terraform/dev.tfvars to
 #                         the same CIDR and `terraform apply` BEFORE running
 #                         this, or the LB will time out (Service-level and
