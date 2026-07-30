@@ -15,13 +15,12 @@ fullnameOverride: ""
 # affected either way - this mainly matters for manual helm install/upgrade.
 namespaceOverride: "city-population"
 createNamespace: true
-
 # application (FastAPI) layer
 app:
   replicaCount: 2
   image:
     repository: citypopdevacrmhupn.azurecr.io/city-population-api
-    tag: "1351f8f67922"
+    tag: "abbe0fd36801"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -95,7 +94,6 @@ app:
         secretName: es-username
       - objectName: es-password
         secretName: es-password
-
 elasticsearch:
   enabled: true
   replicaCount: 1
