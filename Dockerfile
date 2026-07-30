@@ -13,9 +13,6 @@ WORKDIR /build
 # copy just the manifest first so this layer stays cached
 COPY app/requirements.txt ./requirements.txt
 
-# pip/setuptools/wheel from ensurepip lag behind upstream security fixes
-# (CVE-2026-24049 in wheel, CVE-2026-8643 in pip), so upgrade them explicitly.
-# Versions pinned to satisfy hadolint DL3013.
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
@@ -28,9 +25,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PORT=8000
 
-# The system pip/setuptools/wheel baked into this base image are also stale
-# (same CVEs as above). The app itself only runs from /opt/venv, but Trivy
-# scans the whole image, so patch these too.
 RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && rm -rf /root/.cache/pip
 

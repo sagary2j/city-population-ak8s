@@ -33,9 +33,6 @@ app:
     ES_STARTUP_MAX_RETRIES: "30"
     ES_STARTUP_RETRY_DELAY_SECONDS: "2"
     ES_VERIFY_CERTS: "false"
-  # Elasticsearch credentials (leave blank for the dev/single-node ES this
-  # chart deploys, which runs with security disabled). In production, source
-  # these from Key Vault / Vault instead of plaintext values.
   elasticsearchAuth:
     username: ""
     password: ""
@@ -47,10 +44,6 @@ app:
       cpu: 500m
       memory: 256Mi
   probes:
-    # Gates when liveness/readiness begin: Kubernetes won't run those probes
-    # until this one succeeds, so a slow Elasticsearch (up to
-    # ES_STARTUP_MAX_RETRIES * ES_STARTUP_RETRY_DELAY_SECONDS, default 60s)
-    # never causes a premature liveness-triggered restart.
     startup:
       path: /health/startup
       periodSeconds: 5
@@ -92,10 +85,6 @@ app:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8000"
     prometheus.io/path: "/metrics"
-  # Production secret sourcing via the AKS-managed Secrets Store CSI Driver
-  # + Key Vault (terraform/key_vault.tf), instead of the plaintext
-  # helm/templates/secret.yaml used for local/dev. Disabled by default;
-  # enable once the CSI driver add-on and workload identity are set up.
   keyVault:
     enabled: false
     name: "" # terraform output: key_vault_name
@@ -107,9 +96,6 @@ app:
       - objectName: es-password
         secretName: es-password
 
-# elasticsearch (stateful data) layer - single-node, fine for local dev.
-# For production HA (dedicated master/data/ingest roles, multi-AZ,
-# snapshots) see the README's production roadmap section.
 elasticsearch:
   enabled: true
   replicaCount: 1

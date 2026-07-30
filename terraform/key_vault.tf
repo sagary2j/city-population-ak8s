@@ -1,8 +1,7 @@
 # Optional Key Vault backing for app secrets. The AKS-managed identity from
 # the key_vault_secrets_provider add-on (main.tf) gets read access here;
 # Pods consume secrets via a SecretProviderClass (see
-# helm/templates/secretproviderclass.yaml) using Workload Identity, not a
-# static credential.
+# helm/templates/secretproviderclass.yaml) using Workload Identity, not a static credential.
 
 #checkov:skip=CKV2_AZURE_32:Private endpoint is implemented as a separate azurerm_private_endpoint resource with the same conditional count; this skip avoids graph-resolution false positives in CI.
 #checkov:skip=CKV_AZURE_110:Purge protection is intentionally environment-gated (enabled only when environment=="prod") so this dev stack can be torn down immediately via `terraform destroy` without waiting out the soft-delete retention; production deployments get purge protection automatically.

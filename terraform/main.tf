@@ -50,11 +50,9 @@ resource "azurerm_subnet_network_security_group_association" "aks" {
   network_security_group_id = azurerm_network_security_group.aks.id
 }
 
-# Opens the ArgoCD UI LoadBalancer to specific CIDRs (see
-# scripts/bootstrap-argocd.sh --expose-ui). The NSG default is
-# deny-all-inbound-from-internet, so without this rule the LB's public IP
-# never gets traffic even once the Service itself is configured. Only
-# created when argocd_ui_allowed_cidrs is non-empty.
+# Opens the ArgoCD UI LoadBalancer to specific CIDRs (see scripts/bootstrap-argocd.sh --expose-ui). 
+# The NSG default is deny-all-inbound-from-internet, so without this rule the LB's public IP
+# never gets traffic even once the Service itself is configured. Only created when argocd_ui_allowed_cidrs is non-empty.
 resource "azurerm_network_security_rule" "argocd_ui" {
   count                       = length(var.argocd_ui_allowed_cidrs) > 0 ? 1 : 0
   name                        = "AllowArgoCDUIInbound"
@@ -98,11 +96,7 @@ resource "azurerm_container_registry" "main" {
   data_endpoint_enabled         = true
   zone_redundancy_enabled       = true
   # Quarantine requires an external scanner (Microsoft Defender for
-  # Cloud / Qualys container image scanning) to release images before
-  # they become pullable - that integration isn't configured here, so
-  # every push would be quarantined forever, blocking cosign signing and
-  # AKS pulls alike. Vulnerability gating is already enforced by the
-  # Trivy step in ci-cd.yaml, so ACR's own quarantine is redundant.
+  # Cloud / Qualys container image scanning) to release images before they become pullable
   quarantine_policy_enabled = false
   tags                      = local.common_tags
 
@@ -117,13 +111,7 @@ resource "azurerm_container_registry" "main" {
 }
 
 # aks cluster
-#
-# host_encryption_enabled on the node pools is off (see CKV_AZURE_227 skip
-# below): this is a Free Trial subscription, which can't request quota
-# increases, and is already at its 4 vCPU/region cap across the system+user
-# pools. Enabling host encryption needs temporary_name_for_rotation, which
-# needs 2 spare vCPUs for a temp node pool during rotation - not available
-# here. Revisit once the subscription moves to Pay-As-You-Go.
+
 #checkov:skip=CKV_AZURE_117:Disk Encryption Set (CMK) is environment-specific and requires an externally managed key lifecycle; baseline uses platform-managed encryption plus host encryption.
 resource "azurerm_kubernetes_cluster" "main" {
   #checkov:skip=CKV_AZURE_117:Cluster uses host encryption + platform-managed encryption; DES/CMK rollout is externalized.

@@ -162,10 +162,6 @@ variable "github_repo_id" {
   default     = "1313745460"
 }
 
-# Remote state storage account, bootstrapped out-of-band by
-# scripts/bootstrap-tfstate.sh (see versions.tf). Referenced here only to
-# grant the CI identity RBAC access to it - this stack does not manage
-# (create/destroy) these resources.
 variable "tfstate_resource_group_name" {
   description = "Resource group holding the Terraform remote state storage account."
   type        = string
@@ -184,9 +180,7 @@ variable "github_oidc_environments" {
   default     = ["dev", "prod"]
 }
 
-# Static (non-dynamic) principal for the Key Vault admin role assignment in
-# key_vault.tf, so it doesn't flip-flop between whichever identity last ran
-# `terraform apply` (see terraform_kv_admin's comment for details).
+# My Principle object IDs
 variable "terraform_operator_object_id" {
   description = "Azure AD object ID of the human operator retaining Key Vault Secrets Officer access, independent of the CI identity."
   type        = string

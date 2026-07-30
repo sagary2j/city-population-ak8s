@@ -3,7 +3,7 @@
 # Terraform remote state - this can't itself be managed by the Terraform it
 # bootstraps (classic chicken-and-egg), so it's a small idempotent script run
 # once per Azure subscription/environment before `terraform init`.
-#
+
 # Usage:
 #   ./scripts/bootstrap-tfstate.sh <environment> [location]
 #   ./scripts/bootstrap-tfstate.sh dev westeurope
