@@ -506,6 +506,15 @@ an ArgoCD `ApplicationSet` templated over a list of environments.
 
 ---
 
+## Challenges Faced During Implementation & Deployment
+
+Provisioning this on a Free Trial Azure subscription hit a run of real
+region/quota/identity errors along the way. See
+[docs/challenges.md](docs/challenges.md) for the actual error messages and
+how each one got fixed.
+
+---
+
 ## Design Notes & Production Roadmap
 
 A few notes on trickier bits of this build, and what we'd want to change before
