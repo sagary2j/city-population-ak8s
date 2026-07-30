@@ -17,7 +17,7 @@ terraform {
   }
 
   # Remote state in Azure Storage. The storage account/container must exist
-  # before `terraform init` runs -- see scripts/bootstrap-tfstate.sh, which
+  # before `terraform init` runs - see scripts/bootstrap-tfstate.sh, which
   # creates them idempotently. Values are intentionally supplied via
   # `-backend-config` (CLI flag or partial config file) rather than hardcoded
   # here, since the backend cannot reference variables and differs per

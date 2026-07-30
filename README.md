@@ -96,8 +96,8 @@ The loop is fully closed: `ci-cd.yaml`'s `update-manifests` job bumps
 built and pushed, and commits that change back to `main` as
 `github-actions[bot]` (with `[skip ci]` so the bump itself doesn't
 retrigger the pipeline). ArgoCD picks up that commit on its next
-poll/webhook and reconciles the cluster — commit app code → running on AKS
-requires no manual steps.
+poll/webhook and reconciles the cluster: a commit to app code ends up
+running on AKS with no manual steps in between.
 
 ---
 
@@ -283,7 +283,7 @@ terraform init \
   -backend-config="use_azuread_auth=true"
 # `use_azuread_auth=true` authenticates to the state storage account via your
 # `az login`/OIDC identity's RBAC role (Storage Blob Data Contributor) rather
-# than a storage account access key -- no key ever needs to be generated or
+# than a storage account access key - no key ever needs to be generated or
 # stored. The same flag is used by both GitHub Actions workflows below.
 
 # 4. Plan and apply
@@ -313,7 +313,7 @@ In the GitHub repo (Settings → Secrets and variables → Actions), set:
 | `TF_STATE_RG` / `TF_STATE_SA` / `TF_STATE_CONTAINER` / `TF_STATE_KEY` | Variables | printed by `bootstrap-tfstate.sh` |
 
 Set the three `AZURE_*` values as **Secrets** and everything else as
-**Variables** only -- `${{ secrets.* }}` and `${{ vars.* }}` are looked up
+**Variables** only - `${{ secrets.* }}` and `${{ vars.* }}` are looked up
 independently, so a name defined in both resolves to the Secret and can mask
 a Variable update. Only `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/
 `AZURE_SUBSCRIPTION_ID` need Secret-level protection (and even those aren't
@@ -333,7 +333,7 @@ OIDC flow, trusted via the federated credentials created in
 > fails with `AADSTS700213: No matching federated identity record found`,
 > set `github_owner_id`/`github_repo_id` in `dev.tfvars` to the numeric IDs
 > from `https://api.github.com/repos/<owner>/<repo>` (`.id` and `.owner.id`)
-> and re-apply -- `terraform/identity.tf` builds the federated credential
+> and re-apply - `terraform/identity.tf` builds the federated credential
 > `subject` from these.
 
 Get cluster credentials locally:
@@ -353,34 +353,34 @@ $(terraform output -raw get_credentials_command)
 `.github/workflows/ci-cd.yaml` runs on every push/PR touching `app/`,
 `Dockerfile`, or `helm/`:
 
-1. **Lint & test** — `ruff` (style/correctness), `pytest` (16 unit tests
-   against a mocked Elasticsearch client — no live cluster needed), results
+1. **Lint & test**: `ruff` (style/correctness), `pytest` (16 unit tests
+   against a mocked Elasticsearch client, no live cluster needed), results
    published as a check-run annotation.
-2. **SAST** — `bandit` scans `main.py` for insecure code patterns; results
+2. **SAST**: `bandit` scans `main.py` for insecure code patterns; results
    uploaded as SARIF to GitHub Code Scanning.
-3. **Secret scanning** — `gitleaks` scans the full git history on every run
+3. **Secret scanning**: `gitleaks` scans the full git history on every run
    so a credential can't slip in via a squashed/rebased commit.
-4. **Dockerfile lint** — `hadolint` catches insecure or inefficient
+4. **Dockerfile lint**: `hadolint` catches insecure or inefficient
    Dockerfile patterns (e.g. missing pinned versions, running as root).
-5. **IaC scanning** — `checkov` and `tfsec` scan `terraform/`, `helm/`, and
+5. **IaC scanning**: `checkov` and `tfsec` scan `terraform/`, `helm/`, and
    the `Dockerfile` for misconfigurations (open ingress, missing encryption,
    overly broad IAM, etc.), uploaded as SARIF.
-6. **Build & image scan** — builds the image with Buildx (layer-cached via
-   `type=gha`), then `trivy` scans it for CRITICAL/HIGH CVEs — **the
-   pipeline fails the build** if any are found (`exit-code: 1`), so
+6. **Build & image scan**: builds the image with Buildx (layer-cached via
+   `type=gha`), then `trivy` scans it for CRITICAL/HIGH CVEs. The
+   pipeline fails the build if any are found (`exit-code: 1`), so
    vulnerable images never reach ACR.
-7. **Push & sign** — only after every prior gate passes, the image is
+7. **Push & sign**: only after every prior gate passes, the image is
    pushed to ACR and keylessly signed with `cosign` (using the same GitHub
-   OIDC identity — no signing key to manage/rotate).
-8. **GitOps update** — the pipeline still does **not** run `kubectl apply`
+   OIDC identity, so there's no signing key to manage or rotate).
+8. **GitOps update**: the pipeline still does **not** run `kubectl apply`
    or `helm upgrade` itself. Instead, the `update-manifests` job bumps
    `app.image.tag` (and `app.image.repository`) in `helm/values.yaml` and
    commits that change back to `main` (as `github-actions[bot]`, with
-   `[skip ci]`); ArgoCD (Part G) detects the commit and reconciles the
-   cluster — the classic GitOps split between CI (build/test/scan) and CD
-   (sync), which also means the CI identity never needs cluster-admin (it
-   only has `contents: write` on the repo, plus `AcrPush` and AKS
-   "Cluster User" on Azure).
+   `[skip ci]`). ArgoCD (see the GitOps section below) picks up the commit
+   and reconciles the cluster, keeping CI (build/test/scan) and CD (sync)
+   as separate concerns, which also means the CI identity never needs
+   cluster-admin (it only has `contents: write` on the repo, plus
+   `AcrPush` and AKS "Cluster User" on Azure).
 
 `.github/workflows/terraform.yaml` is a separate pipeline for
 infrastructure changes: `terraform plan` runs on every PR (and every push)
@@ -394,7 +394,7 @@ than re-planning at apply time. Both workflows also support
 `workflow_dispatch` for on-demand manual runs.
 
 **Why two pipelines?** The app pipeline's identity only needs `AcrPush` +
-AKS "Cluster User" (read kubeconfig) — it can't modify infrastructure. The
+AKS "Cluster User" (read kubeconfig) and can't modify infrastructure. The
 Terraform pipeline needs materially broader Azure permissions
 (Contributor + User Access Administrator scoped to the resource group) to
 manage AKS/ACR/networking themselves. Keeping them separate means a
@@ -411,13 +411,13 @@ If the AKS API server is fully private (`enable_private_cluster = true` and
 or GitHub-hosted runner. All commands below therefore run through
 [`scripts/bootstrap-argocd.sh`](scripts/bootstrap-argocd.sh), which uses
 `az aks command invoke` (executes kubectl inside the cluster via the ARM
-control plane) instead of a direct connection — this works regardless of
+control plane) instead of a direct connection. This works regardless of
 network reachability, as long as the cluster is running and the caller has
 `Microsoft.ContainerService/managedClusters/runCommand/action` (covered by
 the `Contributor` role already granted in `terraform/identity.tf`). If your
 cluster does have direct API server access (e.g. `enable_private_cluster =
 false`, or you're on a VPN/self-hosted runner with connectivity), the same
-`kubectl`/`argocd` commands work as-is — just drop the `az aks command
+`kubectl`/`argocd` commands work as-is, just drop the `az aks command
 invoke --command "..."` wrapper.
 
 ### Install ArgoCD + register the app (one command)
@@ -427,7 +427,7 @@ invoke --command "..."` wrapper.
 # e.g. ./scripts/bootstrap-argocd.sh citypop-dev-rg citypop-dev-aks
 ```
 
-This installs ArgoCD (idempotent — safe to re-run), applies
+This installs ArgoCD (idempotent, safe to re-run), applies
 `argocd/project.yaml` and `argocd/application.yaml`, and prints the
 resulting `Application` sync/health status. The script starts the cluster
 first if it's stopped, and waits for `provisioningState=Succeeded` before
@@ -440,12 +440,12 @@ fork or a non-default branch without editing the committed YAML.
 
 `argocd/application.yaml` sets `syncPolicy.automated` with `prune: true`
 and `selfHeal: true`: ArgoCD polls (and/or receives a webhook from) the Git
-repo, and whenever `helm/` changes — most commonly the automated image-tag
-bump from `ci-cd.yaml`'s `update-manifests` job — it renders the chart and
+repo, and whenever `helm/` changes (most commonly the automated image-tag
+bump from `ci-cd.yaml`'s `update-manifests` job), it renders the chart and
 applies the diff to the `city-population` namespace, removing any
 resources deleted from Git and reverting any manual `kubectl edit` drift.
-This is the same "declarative desired state lives in Git, ArgoCD
-continuously reconciles the cluster to match it" model used in Part F.
+It's the same "desired state lives in Git, ArgoCD keeps reconciling the
+cluster to match it" pattern the whole GitOps setup relies on.
 
 ### Access the ArgoCD UI
 
@@ -459,7 +459,7 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 
 **If the cluster is fully private** (no direct network path), the only way
 to reach the UI from outside the cluster is a public LoadBalancer restricted
-to a specific source IP — both the Kubernetes Service AND the subnet's NSG
+to a specific source IP, both the Kubernetes Service AND the subnet's NSG
 have to allow it:
 
 1. Set `argocd_ui_allowed_cidrs = ["<your-public-ip>/32"]` in
@@ -476,7 +476,7 @@ have to allow it:
    ArgoCD UI" a self-contained, reviewable action. Drop `-target` only once
    you've reviewed and want to apply everything pending.
 2. `./scripts/bootstrap-argocd.sh <rg> <cluster> --expose-ui <your-public-ip>/32`
-   — patches `argocd-server` to `type=LoadBalancer` with a matching
+  , patches `argocd-server` to `type=LoadBalancer` with a matching
    `loadBalancerSourceRanges`, waits for the external IP, and prints the
    initial admin password.
 3. Browse to `https://<printed-external-ip>` (self-signed cert warning is
@@ -547,7 +547,7 @@ every "upsert" of the same city under Elasticsearch's default
 auto-generated IDs. The API instead derives a deterministic document ID
 from a normalized (trimmed, lower-cased) version of the city name, so
 repeated upserts of "Warsaw", "warsaw", or " Warsaw " all converge on a
-single document — matching the intended upsert semantics.
+single document, matching the intended upsert semantics.
 
 **Read-only root filesystem vs. runtime writes.** Hardening the Pod with
 `readOnlyRootFilesystem: true` broke Python/uvicorn's need for a writable
@@ -635,7 +635,7 @@ corrected automatically, and rolling back is just `git revert`.
   **cert-manager**.
 - Continue enforcing non-root execution, `readOnlyRootFilesystem`,
   dropped Linux capabilities, and `seccompProfile: RuntimeDefault` (already
-  in `values.yaml`) — and add **Azure Policy for AKS** / OPA Gatekeeper
+  in `values.yaml`), and add **Azure Policy for AKS** / OPA Gatekeeper
   admission control to make these mandatory cluster-wide rather than
   chart-level opt-in.
 - Scan images in CI (Trivy/Grype) and sign them (cosign/Notary) before

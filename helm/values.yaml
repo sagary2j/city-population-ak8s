@@ -4,23 +4,19 @@
 
 nameOverride: ""
 fullnameOverride: ""
-# Dedicated namespace for every resource this chart renders (Deployment,
-# StatefulSet, Services, Secret, NetworkPolicy, etc.) -- keeps the app and
-# its Elasticsearch data layer isolated from `default` and from other
-# workloads in the cluster, and matches the NetworkPolicy in
-# templates/networkpolicy.yaml which only allows pod-to-pod traffic within
-# this namespace. Set to "" to fall back to whatever namespace `helm
-# install -n <ns>` / the current kube context provides instead.
+# Dedicated namespace for everything this chart renders - keeps the app and
+# its Elasticsearch layer isolated from `default` and other workloads, and
+# matches the NetworkPolicy in templates/networkpolicy.yaml (pod-to-pod
+# traffic only within this namespace). Set to "" to fall back to whatever
+# namespace `helm install -n <ns>` provides instead.
 #
-# Note: ArgoCD's Application (argocd/application.yaml) pins its own
-# `destination.namespace: city-population` independently of this value, so
-# GitOps-driven deploys are unaffected either way -- this mainly matters for
-# manual `helm install`/`helm upgrade` (see Makefile / README.md).
+# ArgoCD's Application (argocd/application.yaml) pins its own
+# destination.namespace independently of this, so GitOps deploys aren't
+# affected either way - this mainly matters for manual helm install/upgrade.
 namespaceOverride: "city-population"
 createNamespace: true
-# ---------------------------------------------------------------------------
-# Application (FastAPI) layer
-# ---------------------------------------------------------------------------
+
+# application (FastAPI) layer
 app:
   replicaCount: 2
   image:
@@ -37,10 +33,9 @@ app:
     ES_STARTUP_MAX_RETRIES: "30"
     ES_STARTUP_RETRY_DELAY_SECONDS: "2"
     ES_VERIFY_CERTS: "false"
-  # Credentials for Elasticsearch (leave blank for the dev/single-node ES
-  # deployed by this chart, which runs with security disabled). In
-  # production, source these from a Secret backed by Azure Key Vault /
-  # HashiCorp Vault instead of plaintext values -- see README Part D.
+  # Elasticsearch credentials (leave blank for the dev/single-node ES this
+  # chart deploys, which runs with security disabled). In production, source
+  # these from Key Vault / Vault instead of plaintext values.
   elasticsearchAuth:
     username: ""
     password: ""
@@ -98,10 +93,9 @@ app:
     prometheus.io/port: "8000"
     prometheus.io/path: "/metrics"
   # Production secret sourcing via the AKS-managed Secrets Store CSI Driver
-  # + Azure Key Vault (provisioned in terraform/key_vault.tf), instead of the
-  # plaintext helm/templates/secret.yaml used for local/dev. Disabled by
-  # default; enable once the CSI driver add-on and workload identity are
-  # set up, then point elasticsearchAuth at the CSI-mounted files instead.
+  # + Key Vault (terraform/key_vault.tf), instead of the plaintext
+  # helm/templates/secret.yaml used for local/dev. Disabled by default;
+  # enable once the CSI driver add-on and workload identity are set up.
   keyVault:
     enabled: false
     name: "" # terraform output: key_vault_name
@@ -112,13 +106,10 @@ app:
         secretName: es-username
       - objectName: es-password
         secretName: es-password
-# ---------------------------------------------------------------------------
-# Elasticsearch (stateful data) layer
-# NOTE: this chart ships a lightweight single-node StatefulSet suitable for
-# local development and the take-home evaluation. For production sizing and
-# HA topology (dedicated master/data/ingest roles, 3+ AZs, snapshots) see
-# README.md Part D: Production Scaling Architecture.
-# ---------------------------------------------------------------------------
+
+# elasticsearch (stateful data) layer - single-node, fine for local dev.
+# For production HA (dedicated master/data/ingest roles, multi-AZ,
+# snapshots) see the README's production roadmap section.
 elasticsearch:
   enabled: true
   replicaCount: 1

@@ -30,9 +30,9 @@ locals {
 # matches the `environment:` key in the deploy job of ci-cd.yaml), plus one
 # for direct pushes to the default branch (used by the Terraform plan/apply
 # workflow, which does not run inside a GitHub Environment).
-#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...), which is more precise than the legacy owner/repo format -- Checkov's repo-format regex predates this format and doesn't recognize the embedded numeric IDs, producing a false positive. The claim is still repo-scoped (no wildcards) and further scoped to a specific GitHub Environment.
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...), which is more precise than the legacy owner/repo format - Checkov's repo-format regex predates this format and doesn't recognize the embedded numeric IDs, producing a false positive. The claim is still repo-scoped (no wildcards) and further scoped to a specific GitHub Environment.
 resource "azuread_application_federated_identity_credential" "github_environments" {
-  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs - false positive.
   for_each = var.create_github_oidc_identity ? toset(var.github_oidc_environments) : []
 
   application_id = azuread_application.github_actions[0].id
@@ -43,9 +43,9 @@ resource "azuread_application_federated_identity_credential" "github_environment
   subject        = "repo:${local.github_immutable_repo}:environment:${each.value}"
 }
 
-#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive. Claim is scoped to a single repo + the default branch ref, no wildcards.
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs - false positive. Claim is scoped to a single repo + the default branch ref, no wildcards.
 resource "azuread_application_federated_identity_credential" "github_default_branch" {
-  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs - false positive.
   count = var.create_github_oidc_identity ? 1 : 0
 
   application_id = azuread_application.github_actions[0].id
@@ -56,9 +56,9 @@ resource "azuread_application_federated_identity_credential" "github_default_bra
   subject        = "repo:${local.github_immutable_repo}:ref:refs/heads/${var.github_default_branch}"
 }
 
-#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive. Claim is scoped to a single repo + pull_request event, no wildcards.
+#checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format (repo:OWNER@OWNER_ID/REPO@REPO_ID:...); Checkov's repo-format regex doesn't recognize the embedded numeric IDs - false positive. Claim is scoped to a single repo + pull_request event, no wildcards.
 resource "azuread_application_federated_identity_credential" "github_pull_requests" {
-  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs -- false positive.
+  #checkov:skip=CKV_AZURE_249:Subject uses GitHub's immutable claim format; Checkov's repo-format regex doesn't recognize the embedded numeric IDs - false positive.
   count = var.create_github_oidc_identity ? 1 : 0
 
   application_id = azuread_application.github_actions[0].id
@@ -69,7 +69,7 @@ resource "azuread_application_federated_identity_credential" "github_pull_reques
   subject        = "repo:${local.github_immutable_repo}:pull_request"
 }
 
-# --- Least-privilege role assignments for the CI/CD identity ---------------
+# least-privilege role assignments for the CI/CD identity
 
 # Push (and pull) images to ACR.
 resource "azurerm_role_assignment" "github_acr_push" {
@@ -107,9 +107,8 @@ resource "azurerm_role_assignment" "github_tfstate_access" {
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
 
-# The tfstate RG itself is bootstrapped out-of-band (scripts/bootstrap-tfstate.sh)
-# and isn't managed by this stack, so the CI identity only ever needs to read
-# it (it refreshes state before every plan/apply) -- Reader is sufficient.
+# The tfstate RG is bootstrapped out-of-band (scripts/bootstrap-tfstate.sh) and
+# isn't managed by this stack, so the CI identity only needs Reader on it.
 resource "azurerm_role_assignment" "github_tfstate_rg_reader" {
   count = var.create_github_oidc_identity ? 1 : 0
 
@@ -118,13 +117,10 @@ resource "azurerm_role_assignment" "github_tfstate_rg_reader" {
   principal_id         = azuread_service_principal.github_actions[0].object_id
 }
 
-# The workload RG IS managed by this stack, and `terraform apply` runs from
-# CI (see .github/workflows/terraform.yaml's `apply` job, gated behind the
-# `dev` GitHub Environment's manual approval). It therefore needs:
-# - Contributor: create/update/delete the resources this stack manages.
-# - User Access Administrator: manage the `azurerm_role_assignment` resources
-#   this same stack creates (github_acr_push, github_aks_cluster_user,
-#   terraform_kv_admin/github_kv_admin, etc.), all scoped within this RG.
+# The workload RG is managed by this stack and `terraform apply` runs from CI
+# (gated behind the `dev` GitHub Environment's manual approval), so it needs
+# both Contributor (manage the resources) and User Access Administrator
+# (manage the role assignments this same stack creates), scoped to this RG.
 resource "azurerm_role_assignment" "github_workload_rg_contributor" {
   count = var.create_github_oidc_identity ? 1 : 0
 

@@ -1,8 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# ---------------------------------------------------------------------------
-# Stage 1: build dependencies into an isolated venv
-# ---------------------------------------------------------------------------
+# stage 1: build deps into an isolated venv
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,21 +10,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# Only the manifest is copied first to maximize Docker layer caching.
+# copy just the manifest first so this layer stays cached
 COPY app/requirements.txt ./requirements.txt
 
-# Upgrade pip, setuptools, and wheel explicitly -- the versions bundled by
-# `python -m venv` (via ensurepip) are pinned to whatever shipped with the
-# base image and lag behind upstream security fixes (e.g. CVE-2026-24049 in
-# wheel, CVE-2026-8643 in pip). Pinned exact versions to satisfy hadolint
-# DL3013 and avoid unpinned 'latest' drift in the build.
+# pip/setuptools/wheel from ensurepip lag behind upstream security fixes
+# (CVE-2026-24049 in wheel, CVE-2026-8643 in pip), so upgrade them explicitly.
+# Versions pinned to satisfy hadolint DL3013.
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# ---------------------------------------------------------------------------
-# Stage 2: minimal, non-root runtime image
-# ---------------------------------------------------------------------------
+# stage 2: minimal, non-root runtime image
 FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -34,16 +28,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PORT=8000
 
-# The base image's system-level pip/setuptools/wheel (bootstrapped via
-# ensurepip when this image was built) lag behind upstream security fixes,
-# e.g. CVE-2026-24049 (wheel), CVE-2026-8643 (pip). The app itself never
-# uses these (it only runs from /opt/venv), so patch them here too -- Trivy
-# scans the whole image, not just the venv. Pinned exact versions to
-# satisfy hadolint DL3013 and avoid unpinned 'latest' drift.
+# The system pip/setuptools/wheel baked into this base image are also stale
+# (same CVEs as above). The app itself only runs from /opt/venv, but Trivy
+# scans the whole image, so patch these too.
 RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel==0.47.0 \
     && rm -rf /root/.cache/pip
 
-# Dedicated non-root, non-login system user/group.
+# dedicated non-root, non-login system user/group
 RUN groupadd --system --gid 10001 appgroup \
     && useradd --system --uid 10001 --gid appgroup --no-create-home \
        --shell /usr/sbin/nologin appuser
@@ -53,8 +44,7 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY app/ /app/
 
-# Ensure application files are owned by the non-root user and are not
-# group/world-writable.
+# app files owned by the non-root user, not group/world-writable
 RUN chown -R appuser:appgroup /app \
     && chmod -R 550 /app
 
@@ -62,8 +52,7 @@ USER appuser:appgroup
 
 EXPOSE 8000
 
-# Container-level healthcheck in addition to the Kubernetes probes, useful
-# for docker-compose / plain `docker run` local testing.
+# container-level healthcheck, mainly for docker-compose / plain `docker run`
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else sys.exit(1)"
 

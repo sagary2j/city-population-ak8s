@@ -1,9 +1,9 @@
-# City Population AKS — Architecture
+# City Population AKS - Architecture
 
 **Project**: city-population-ak8s
 **Cloud**: Azure
 **Compute**: Azure Kubernetes Service (AKS), private cluster
-**Pattern**: GitOps (ArgoCD) microservice — FastAPI + Elasticsearch, deployed via Helm
+**Pattern**: GitOps (ArgoCD) microservice - FastAPI + Elasticsearch, deployed via Helm
 
 ## Summary
 
@@ -148,32 +148,32 @@ graph TB
 ## Relationship Details
 
 - **CI/CD → Azure (OIDC)**: GitHub Actions authenticates to Entra ID via federated
-  credentials (`terraform/identity.tf`) — no client secrets stored in GitHub. Separate
+  credentials (`terraform/identity.tf`) - no client secrets stored in GitHub. Separate
   federated credentials exist for each GitHub Environment (`dev`, `prod`), the default
   branch (for Terraform plan/apply), and `pull_request` events (for PR-time `terraform
   plan`).
 - **Image build/push**: `ci-cd.yaml` builds the FastAPI image, scans it (Trivy), signs it
-  (cosign), and pushes to ACR using the `AcrPush` role — then commits the new image tag
+  (cosign), and pushes to ACR using the `AcrPush` role, then commits the new image tag
   into `helm/values.yaml` on `main`.
 - **GitOps reconciliation**: The ArgoCD `Application` (`argocd/application.yaml`) polls
   the repo's `helm/` path on `main` with `automated: {prune, selfHeal}`, so any commit
   (including the CI image-tag bump) is reconciled onto the cluster automatically.
 - **Image pull (no secrets)**: AKS's kubelet managed identity is granted `AcrPull` on the
-  ACR directly (`azurerm_role_assignment.aks_acr_pull`) — pods need no
+  ACR directly (`azurerm_role_assignment.aks_acr_pull`), so pods need no
   `imagePullSecrets`.
 - **Secrets flow**: The AKS `key_vault_secrets_provider` add-on identity is granted `Key
   Vault Secrets User` on the private Key Vault. The `SecretProviderClass`
   (`helm/templates/secretproviderclass.yaml`) uses that identity (Workload Identity, not
   pod identity/VM identity) to mount `es-username`/`es-password` as a Kubernetes Secret
-  consumed by the app Deployment's env vars — this path is disabled by default
+  consumed by the app Deployment's env vars. This path is disabled by default
   (`app.keyVault.enabled: false`) in favor of a plaintext dev `Secret` for local/dev use.
 - **Network isolation**: A `NetworkPolicy` restricts inbound traffic to the Elasticsearch
   pods to only the app pods (port 9200) and other ES pods (port 9300, for future multi-
-  node scaling) — no other workload in the namespace/cluster can reach ES directly.
+  node scaling). No other workload in the namespace/cluster can reach ES directly.
 - **Private cluster access**: The AKS API server has no public endpoint
   (`private_cluster_enabled = true`); the only access path is `az aks command invoke`
   (management-plane Azure RBAC), and `local_account_disabled = true` forces all
-  `kubectl` access through Azure AD + Azure RBAC — there are no local cluster admin
+  `kubectl` access through Azure AD + Azure RBAC - there are no local cluster admin
   accounts.
 - **Optional public ingress**: The NSG has no inbound-from-internet rule by default; a
   rule is conditionally created (`var.argocd_ui_allowed_cidrs`) to allow a CIDR-limited
@@ -184,10 +184,10 @@ graph TB
 
 ## Notes / Recommendations
 
-- Elasticsearch is currently a **single-node** dev deployment (see README Part D for the
-  production HA topology: dedicated master/data/ingest roles across 3+ AZs with
-  snapshots).
-- `enable_key_vault` and `app.keyVault.enabled` are independent toggles — Key Vault
+- Elasticsearch is currently a **single-node** dev deployment (see the README's
+  production roadmap section for the HA topology: dedicated master/data/ingest roles
+  across 3+ AZs with snapshots).
+- `enable_key_vault` and `app.keyVault.enabled` are independent toggles, Key Vault
   infrastructure can exist while the app still uses the plaintext dev Secret; flip both
   on together to fully switch to Key Vault-backed secrets.
 - The subscription is capped at 4 total vCPUs/region (Free Trial), which is why

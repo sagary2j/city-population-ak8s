@@ -14,8 +14,6 @@ spec:
 
   source:
     repoURL: https://github.com/sagary2j/city-population-ak8s.git
-    # TODO: switch back to `main` once feature/build-deploy-acr (which currently
-    # holds helm/, terraform/, and argocd/) is merged into main.
     targetRevision: main
     path: helm
     helm:

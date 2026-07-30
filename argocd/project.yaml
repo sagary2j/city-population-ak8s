@@ -6,7 +6,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  description: City Population API -- application and its Elasticsearch data layer.
+  description: City Population API - application and its Elasticsearch data layer.
 
   sourceRepos:
     - "https://github.com/sagary2j/city-population-ak8s.git"

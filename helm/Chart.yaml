@@ -2,8 +2,8 @@ apiVersion: v2
 name: city-population
 description: >
   A Helm chart deploying the City Population FastAPI application together
-  with a single-node Elasticsearch StatefulSet for local/dev use. See
-  README.md Part D for the production topology (multi-node ES, HA, etc.).
+  with a single-node Elasticsearch StatefulSet for local/dev use. See the
+  README's production roadmap section for the HA topology (multi-node ES, etc.).
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
@@ -13,4 +13,4 @@ keywords:
   - sre
   - azure
 maintainers:
-  - name: SRE Team
+  - name: sagary2j
