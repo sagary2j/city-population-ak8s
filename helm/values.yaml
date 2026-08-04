@@ -19,8 +19,8 @@ createNamespace: true
 app:
   replicaCount: 2
   image:
-    repository: citypopdevacrmhupn.azurecr.io/city-population-api
-    tag: "abbe0fd36801"
+    repository: citypopdevacrnkmdw.azurecr.io/city-population-api
+    tag: "193144fa37ff"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
